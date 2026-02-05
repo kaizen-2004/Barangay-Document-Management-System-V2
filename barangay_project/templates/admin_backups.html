@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Database Backups</h2>
+    <div class="text-muted small">Create and restore full database snapshots.</div>
+    <div class="text-muted small">Current database size: {{ db_size_label }}</div>
+  </div>
+  <form method="post" action="{{ url_for('admin.create_backup') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-primary">Create Backup</button>
+  </form>
+</div>
+
+<form method="get" class="card card-body mb-3">
+  <div class="d-flex flex-wrap gap-2 align-items-end">
+    <div>
+      <label class="form-label small mb-1" for="from">From</label>
+      <input id="from" name="from" type="date" class="form-control" value="{{ date_from.isoformat() if date_from else '' }}">
+    </div>
+    <div>
+      <label class="form-label small mb-1" for="to">To</label>
+      <input id="to" name="to" type="date" class="form-control" value="{{ date_to.isoformat() if date_to else '' }}">
+    </div>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">Filter</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.backups') }}">Reset</a>
+    </div>
+  </div>
+</form>
+
+<div class="alert alert-warning">
+  Restoring a backup will overwrite current data. Use only when necessary.
+</div>
+
+<div class="card mb-3">
+  <div class="card-header bg-transparent">
+    <div class="fw-semibold">Restore from Backup</div>
+    <div class="text-muted small">Choose an existing backup or upload a file.</div>
+  </div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('admin.restore_backup') }}" enctype="multipart/form-data" class="row g-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-6">
+        <label class="form-label">Existing backup</label>
+        <select class="form-select" name="filename">
+          <option value="">Select backup file</option>
+          {% for b in backups %}
+            <option value="{{ b.name }}">{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Upload backup file</label>
+        <input type="file" name="backup_file" class="form-control">
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-danger">Restore Backup</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header bg-transparent">
+    <div class="fw-semibold">Available Backups</div>
+    <div class="text-muted small">Stored in {{ backup_dir }}</div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>File</th>
+            <th>Modified</th>
+            <th>Size</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in backups %}
+          <tr>
+            <td>{{ b.name }}</td>
+            <td>{{ b.mtime.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ (b.size / 1024 / 1024) | round(2) }} MB</td>
+            <td class="text-nowrap">
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.download_backup', filename=b.name) }}">Download</a>
+              <form method="post" action="{{ url_for('admin.restore_backup') }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="filename" value="{{ b.name }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Restore</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" class="text-muted p-3">No backups yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

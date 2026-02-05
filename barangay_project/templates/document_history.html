@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% import "_log_helpers.html" as loghelpers %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Document History</h2>
+    <div class="text-muted small">
+      {{ document.document_type.name if document.document_type else 'Document' }} —
+      {{ document.resident.last_name }}, {{ document.resident.first_name }}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.list_documents') }}">Back to Documents</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header bg-transparent">
+    <div class="fw-semibold">History</div>
+    <div class="text-muted small">Who did what and when.</div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 190px;">When</th>
+            <th style="width: 160px;">Who</th>
+            <th>What happened</th>
+            <th style="width: 200px;">Item</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td class="small text-muted">{{ loghelpers.pretty_time(log.timestamp) }}</td>
+            <td>{{ log.user.username if log.user else 'System' }}</td>
+            <td>{{ loghelpers.pretty_action(log.action) }}</td>
+            <td class="small text-muted">{{ loghelpers.pretty_entity(log.entity_type, log.entity_id) or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" class="text-muted p-3">No history entries yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

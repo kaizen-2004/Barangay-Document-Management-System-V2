@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>{{ title or 'Document Form' }}</h2>
+<form method="POST">
+    {{ form.hidden_tag() }}
+    <div class="form-group">
+        {{ form.resident_id.label(class="form-label") }}
+        {{ form.resident_id(class="form-control") }}
+        {% for error in form.resident_id.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="form-group">
+        {{ form.document_type_id.label(class="form-label") }}
+        {{ form.document_type_id(class="form-control") }}
+        {% for error in form.document_type_id.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="form-group">
+        {{ form.details.label(class="form-label", id="details-label") }}
+        {{ form.details(class="form-control", rows=4, placeholder="Details", id="details") }}
+        {% for error in form.details.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="form-group">
+        {{ form.issue_date.label(class="form-label") }}
+        {{ form.issue_date(class="form-control") }}
+        {% for error in form.issue_date.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header">
+            <strong>Resident Photo</strong>
+            <div class="text-muted" style="font-size: .9rem">Capture from camera (no file uploads).</div>
+        </div>
+        <div class="card-body">
+            {{ form.resident_photo_data(id="resident_photo_data") }}
+            <div class="row">
+                <div class="col" style="min-width: 260px">
+                    <video id="camVideo" autoplay playsinline style="width: 100%; max-width: 420px; border-radius: 12px; border: 1px solid #ddd;"></video>
+                    <div style="margin-top: .75rem">
+                        <button type="button" id="captureBtn" class="btn btn-primary">Capture Photo</button>
+                    </div>
+                    <small class="text-muted d-block" style="margin-top: .5rem">
+                        Tip: This photo will be saved to the selected resident (used for ID/certificates that require a photo).
+                    </small>
+                </div>
+                <div class="col" style="min-width: 260px">
+                    <div class="text-muted" style="margin-bottom: .5rem">Preview</div>
+                    <img id="photoPreview" alt="Preview" style="width: 100%; max-width: 420px; border-radius: 12px; border: 1px solid #ddd; display: none;" />
+                </div>
+            </div>
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary">{{ form.submit.label.text }}</button>
+</form>
+
+<script>
+(function() {
+  const video = document.getElementById('camVideo');
+  const captureBtn = document.getElementById('captureBtn');
+  const preview = document.getElementById('photoPreview');
+  const hidden = document.getElementById('resident_photo_data');
+  if (!video || !captureBtn || !hidden) return;
+
+  async function startCam() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = stream;
+    } catch (e) {
+      console.warn('Camera unavailable:', e);
+      captureBtn.disabled = true;
+      captureBtn.textContent = 'Camera unavailable';
+    }
+  }
+
+  captureBtn.addEventListener('click', () => {
+    if (!video.videoWidth) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    hidden.value = dataUrl;
+    if (preview) {
+      preview.src = dataUrl;
+      preview.style.display = 'block';
+    }
+  });
+
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    startCam();
+  } else {
+    captureBtn.disabled = true;
+    captureBtn.textContent = 'Camera not supported';
+  }
+
+  const docTypeSelect = document.getElementById('document_type_id');
+  const detailsLabel = document.getElementById('details-label');
+  const detailsField = document.getElementById('details');
+
+  function updateDetailsLabel() {
+    if (!docTypeSelect || !detailsLabel || !detailsField) return;
+    const selected = docTypeSelect.options[docTypeSelect.selectedIndex];
+    const isResidency = selected && selected.text.toLowerCase().includes('residency');
+    detailsLabel.textContent = isResidency ? 'Purpose' : 'Details';
+    detailsField.placeholder = isResidency ? 'Purpose' : 'Details';
+  }
+
+  if (docTypeSelect) {
+    updateDetailsLabel();
+    docTypeSelect.addEventListener('change', updateDetailsLabel);
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,193 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+{% import "_log_helpers.html" as loghelpers %}
+<div class="mb-4">
+  <h1 class="h3 mb-1">Dashboard</h1>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <div class="text-muted small">Residents</div>
+        <div class="display-6 fw-semibold">{{ resident_count }}</div>
+        <div class="text-muted small">Registered profiles</div>
+      </div>
+      <div class="card-footer bg-transparent border-0 pt-0">
+        <a class="btn btn-primary" href="{{ url_for('main.list_residents') }}">Residents</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('main.add_resident') }}">Add</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <div class="text-muted small">Issued Documents</div>
+        <div class="display-6 fw-semibold">{{ document_count }}</div>
+        <div class="text-muted small">Certificates / clearances</div>
+      </div>
+      <div class="card-footer bg-transparent border-0 pt-0">
+        <a class="btn btn-success" href="{{ url_for('main.list_documents') }}">Documents</a>
+        <a class="btn btn-outline-success" href="{{ url_for('main.issue_document') }}">New Draft</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <div class="text-muted small">This month</div>
+        <div class="display-6 fw-semibold">{{ month_values[-1] if month_labels and month_values else 0 }}</div>
+        <div class="text-muted small">Documents issued</div>
+      </div>
+      <div class="card-footer bg-transparent border-0 pt-0">
+        <a class="btn btn-outline-secondary" href="{{ url_for('main.reports') }}">Open reports</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-transparent">
+        <div class="fw-semibold">Residents by gender</div>
+        <div class="text-muted small">Quick distribution of profiles.</div>
+      </div>
+      <div class="card-body">
+        <canvas id="genderChart" height="160"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-transparent">
+        <div class="fw-semibold">Documents by type</div>
+        <div class="text-muted small">Top issued document types.</div>
+      </div>
+      <div class="card-body">
+        <canvas id="docTypeChart" height="160"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-transparent">
+        <div class="fw-semibold">Documents trend</div>
+        <div class="text-muted small">Issued documents (last 6 months).</div>
+      </div>
+      <div class="card-body">
+        <canvas id="docsTrendChart" height="160"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-12">
+    <div class="card shadow-sm">
+      <div class="card-header bg-transparent d-flex align-items-center justify-content-between">
+        <div>
+          <div class="fw-semibold">Recent activity</div>
+          <div class="text-muted small">Most recent audit entries.</div>
+        </div>
+        {% if current_user.role == 'admin' %}
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.audit_logs') }}">View all</a>
+        {% endif %}
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 190px;">When</th>
+                <th style="width: 160px;">Who</th>
+                <th>What happened</th>
+                <th style="width: 160px;">Item</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for l in recent_logs %}
+              <tr>
+                <td class="small text-muted">{{ loghelpers.pretty_time(l.timestamp) }}</td>
+                <td>{{ l.user.username if l.user else 'System' }}</td>
+                <td>{{ loghelpers.pretty_action(l.action) }}</td>
+                <td class="small text-muted">{{ loghelpers.pretty_entity(l.entity_type, l.entity_id) or '—' }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" class="p-3 text-muted">No activity yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Gender chart (doughnut)
+  const genderLabels = {{ gender_labels | default([]) | tojson }};
+  const genderData = {{ gender_values | default([]) | tojson }};
+  const genderCtx = document.getElementById('genderChart');
+  if (genderCtx) {
+    new Chart(genderCtx, {
+      type: 'doughnut',
+      data: {
+        labels: genderLabels,
+        datasets: [{ data: genderData }]
+      },
+      options: {
+        plugins: { legend: { position: 'bottom' } },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    });
+  }
+
+    // Documents by type (bar)
+  const docTypeLabels = {{ doc_type_labels | default([]) | tojson }};
+  const docTypeValues = {{ doc_type_values | default([]) | tojson }};
+  const docTypeCtx = document.getElementById('docTypeChart');
+  if (docTypeCtx) {
+    new Chart(docTypeCtx, {
+      type: 'bar',
+      data: {
+        labels: docTypeLabels,
+        datasets: [{ data: docTypeValues }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    });
+  }
+
+// Documents trend (line)
+  const monthLabels = {{ month_labels | default([]) | tojson }};
+  const monthValues = {{ month_values | default([]) | tojson }};
+  const trendCtx = document.getElementById('docsTrendChart');
+  if (trendCtx) {
+    new Chart(trendCtx, {
+      type: 'line',
+      data: {
+        labels: monthLabels,
+        datasets: [{ label: 'Documents issued', data: monthValues, tension: 0.25 }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    });
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Barangay DMS{% endblock %}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bdm-navbar bdm-navbar-top border-bottom border-dark-subtle">
+  <div class="container bdm-topbar">
+    <div class="bdm-topbar-left">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('main.index') }}">
+        <div class="brand-logo-group">
+          <img class="brand-logo" src="{{ url_for('static', filename='logo/logo.jpg') }}" alt="Barangay logo">
+          <img class="brand-logo" src="{{ url_for('static', filename='logo/renz-logo.png') }}" alt="Renz logo">
+        </div>
+        <span class="brand-title brand-title-full d-none d-lg-inline">Barangay DMS</span>
+        <span class="brand-title brand-title-short d-inline d-lg-none">Barangay DMS</span>
+      </a>
+    </div>
+    <div class="bdm-topbar-center">RENZPONSABLENG BARANGAY</div>
+    <div class="bdm-topbar-right">
+      {% if current_user.is_authenticated %}
+        <span class="navbar-text me-2 text-white-50 d-none d-lg-inline">Signed in as <span class="text-white">{{ current_user.username }}</span></span>
+        <a class="btn btn-sm btn-outline-light" href="{{ url_for('auth.logout') }}">Logout</a>
+      {% else %}
+        {% if request.endpoint == 'auth.login' %}
+          <span class="navbar-text bdm-login-clock text-white-50" id="login-clock" aria-live="polite"></span>
+        {% else %}
+          <a class="btn btn-sm btn-outline-light" href="{{ url_for('auth.login') }}">Login</a>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</nav>
+
+<nav class="navbar navbar-expand-lg navbar-dark bdm-navbar bdm-navbar-links border-bottom border-dark-subtle">
+  <div class="container">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" aria-controls="navbarMain" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarMain">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        {% if current_user.is_authenticated %}
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.index') }}">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.global_search') }}">Search</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.list_residents') }}">Residents</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.list_documents') }}">Documents</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.issue_document') }}">New Document</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.reports') }}">Reports</a></li>
+
+          {% if current_user.role == 'admin' %}
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
+              <ul class="dropdown-menu dropdown-menu-dark">
+                <li><a class="dropdown-item" href="{{ url_for('admin.list_users') }}">User Management</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('admin.list_document_types') }}">Document Types</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('admin.audit_logs') }}">Audit Logs</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('admin.backups') }}">Backups</a></li>
+              </ul>
+            </li>
+          {% endif %}
+        {% endif %}
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<main class="container py-4">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" data-auto-dismiss="3000">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="border-top py-4">
+  <div class="container text-center small text-muted">
+    Barangay Document Management and Archiving System
+  </div>
+  <div class="container text-center small text-muted">
+    Steve Villa
+  </div>  
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  window.addEventListener('load', () => {
+    document.querySelectorAll('.alert[data-auto-dismiss]').forEach((alertEl) => {
+      const timeoutMs = parseInt(alertEl.dataset.autoDismiss, 10) || 5000;
+      setTimeout(() => {
+        const alert = bootstrap.Alert.getOrCreateInstance(alertEl);
+        alert.close();
+      }, timeoutMs);
+    });
+
+    const clock = document.getElementById('login-clock');
+    if (clock) {
+      const formatNow = () => {
+        const now = new Date();
+        const text = now.toLocaleString('en-PH', {
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
+        clock.textContent = text;
+      };
+      formatNow();
+      setInterval(formatNow, 1000);
+    }
+  });
+</script>
+</body>
+</html>

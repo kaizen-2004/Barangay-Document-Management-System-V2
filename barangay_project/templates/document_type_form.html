@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>{{ title or 'Document Type Form' }}</h2>
+<form method="POST">
+    {{ form.hidden_tag() }}
+
+    <div class="form-group">
+        {{ form.name.label(class="form-label") }}
+        {{ form.name(class="form-control") }}
+        {% for error in form.name.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <div class="form-group">
+        {{ form.description.label(class="form-label") }}
+        {{ form.description(class="form-control", rows=3) }}
+        {% for error in form.description.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <div class="form-group">
+        {{ form.template_path.label(class="form-label") }}
+        {{ form.template_path(class="form-select") }}
+        {% for error in form.template_path.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+        <div class="form-text">Controls which PDF layout is used when issuing.</div>
+    </div>
+
+    <div class="form-check mb-3">
+        {{ form.requires_photo(class="form-check-input") }}
+        {{ form.requires_photo.label(class="form-check-label") }}
+    </div>
+
+    <button type="submit" class="btn btn-primary">{{ submit_label or 'Save' }}</button>
+    <a class="btn btn-secondary" href="{{ url_for('admin.list_document_types') }}">Cancel</a>
+</form>
+{% endblock %}

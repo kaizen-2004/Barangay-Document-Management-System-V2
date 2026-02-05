@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">Manage Users</h2>
+  <a class="btn btn-primary" href="{{ url_for('admin.add_user') }}">Add User</a>
+</div>
+
+<form method="get" action="{{ url_for('admin.list_users') }}" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-md-6">
+      <label class="form-label mb-1">Search</label>
+      <input class="form-control" type="text" name="q" value="{{ q }}" placeholder="Username, email, role...">
+    </div>
+    <div class="col-12 col-md-6 d-flex gap-2">
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.list_users') }}">Reset</a>
+    </div>
+  </div>
+</form>
+<div class="table-responsive">
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th scope="col">ID</th>
+            <th scope="col">Username</th>
+            <th scope="col">Email</th>
+            <th scope="col">Role</th>
+            <th scope="col">Created At</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.id }}</td>
+            <td>{{ user.username }}</td>
+            <td>{{ user.email }}</td>
+            <td>{{ user.role }}</td>
+            <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else '' }}</td>
+            <td>
+                <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                {% if user.id != current_user.id %}
+                <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" style="display:inline-block;" onsubmit="return confirm('Are you sure you want to delete this user?');">
+                    {{ delete_form.hidden_tag() }}
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% include '_pagination.html' %}
+{% endblock %}

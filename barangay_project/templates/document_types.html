@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h2>Document Types</h2>
+    <a class="btn btn-success" href="{{ url_for('admin.add_document_type') }}">Add Type</a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+        <table class="table table-striped mb-0">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Template</th>
+                    <th>Photo Required</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dt in document_types %}
+                <tr>
+                    <td>{{ dt.id }}</td>
+                    <td>{{ dt.name }}</td>
+                    <td>{{ dt.description or '' }}</td>
+                    <td>{{ dt.template_path or 'Auto' }}</td>
+                    <td>{{ 'Yes' if dt.requires_photo else 'No' }}</td>
+                    <td>
+                        <a class="btn btn-sm btn-primary" href="{{ url_for('admin.edit_document_type', type_id=dt.id) }}">Edit</a>
+                        <form method="POST" action="{{ url_for('admin.delete_document_type', type_id=dt.id) }}" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('Delete this document type?');">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center">No document types found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+{% include '_pagination.html' %}
+{% endblock %}

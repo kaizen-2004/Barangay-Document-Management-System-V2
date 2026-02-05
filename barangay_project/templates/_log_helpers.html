@@ -1,0 +1,47 @@
+{% macro pretty_time(ts) -%}
+  {{ ts.strftime('%b %d, %Y %I:%M %p') if ts else '' }}
+{%- endmacro %}
+
+{% macro pretty_entity(entity_type, entity_id) -%}
+  {%- if entity_type == 'resident' -%}
+    Resident
+  {%- elif entity_type == 'document' -%}
+    Document
+  {%- elif entity_type == 'user' -%}
+    User
+  {%- elif entity_type -%}
+    {{ entity_type|replace('_', ' ')|title }}
+  {%- endif -%}
+  {%- if entity_id -%} #{{ entity_id }}{%- endif -%}
+{%- endmacro %}
+
+{% macro pretty_action(action) -%}
+  {%- set a = (action or '')|lower -%}
+  {%- if 'logged in' in a -%}
+    Signed in
+  {%- elif 'logged out' in a -%}
+    Signed out
+  {%- elif 'created document draft' in a -%}
+    Created a document draft
+  {%- elif 'requested document approval' in a -%}
+    Requested document approval
+  {%- elif 'approved document' in a -%}
+    Approved a document
+  {%- elif 'issued document' in a -%}
+    Issued a document
+  {%- elif 'downloaded document pdf' in a -%}
+    Printed a document
+  {%- elif 'generated report' in a or 'exported report' in a -%}
+    Generated a report
+  {%- elif 'created resident' in a -%}
+    Added a resident
+  {%- elif 'updated resident' in a -%}
+    Updated a resident
+  {%- elif 'archived' in a -%}
+    Archived a record
+  {%- elif 'restored' in a -%}
+    Restored a record
+  {%- else -%}
+    {{ action }}
+  {%- endif -%}
+{%- endmacro %}

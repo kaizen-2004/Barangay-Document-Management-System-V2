@@ -1,0 +1,5 @@
+psql "$DATABASE_URL" -c "UPDATE users SET email='you@yourdomain.com' WHERE username='admin';"
+
+psql "$DATABASE_URL" -c "UPDATE users SET email='villasteve57@gmail.com' WHERE username='admin';"
+
+flask --app wsgi run --host 0.0.0.0 --port 5000

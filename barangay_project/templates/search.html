@@ -1,0 +1,273 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Global Search</h2>
+</div>
+
+{% if q %}
+  {% if scope == 'all' %}
+    <div class="text-muted small mb-2">
+      Found {{ residents_count }} resident{{ '' if residents_count == 1 else 's' }} and {{ documents_count }} document{{ '' if documents_count == 1 else 's' }}.
+      Showing up to {{ residents_results|length }} residents and {{ documents_results|length }} documents.
+    </div>
+  {% elif pagination %}
+    <div class="text-muted small mb-2">Found {{ pagination.total }} result{{ '' if pagination.total == 1 else 's' }}.</div>
+  {% endif %}
+{% endif %}
+
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label small mb-1">Search</label>
+      <input class="form-control" name="q" value="{{ q }}" placeholder="Name, barangay ID, document details...">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small mb-1">Scope</label>
+      <select class="form-select" name="scope">
+        <option value="all" {% if scope == 'all' %}selected{% endif %}>All</option>
+        <option value="residents" {% if scope == 'residents' %}selected{% endif %}>Residents</option>
+        <option value="documents" {% if scope == 'documents' %}selected{% endif %}>Documents</option>
+      </select>
+    </div>
+    <div class="col-md-2 doc-only">
+      <label class="form-label small mb-1">Document Status</label>
+      <select class="form-select" name="status">
+        <option value="" {% if not status %}selected{% endif %}>All</option>
+        <option value="draft" {% if status == 'draft' %}selected{% endif %}>Draft</option>
+        <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if status == 'approved' %}selected{% endif %}>Approved</option>
+        <option value="issued" {% if status == 'issued' %}selected{% endif %}>Issued</option>
+      </select>
+    </div>
+    <div class="col-md-2 doc-only">
+      <label class="form-label small mb-1">Document Type</label>
+      <select class="form-select" name="type">
+        <option value="">All</option>
+        {% for dt in document_types %}
+          <option value="{{ dt.id }}" {% if type_id == (dt.id|string) %}selected{% endif %}>{{ dt.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2 d-flex gap-2">
+      <div class="form-check align-self-center">
+        <input class="form-check-input" type="checkbox" name="archived" value="1" id="archived" {% if include_archived %}checked{% endif %}>
+        <label class="form-check-label small" for="archived">Include archived</label>
+      </div>
+    </div>
+    <div class="col-12 d-flex gap-2">
+      <button class="btn btn-primary" type="submit">Search</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('main.global_search') }}">Reset</a>
+    </div>
+  </div>
+</form>
+
+{% if q %}
+  {% if scope == 'all' %}
+    <div class="card mb-3">
+      <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <div class="fw-semibold">Residents</div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.list_residents', q=q) }}">View all residents</a>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Barangay ID</th>
+                <th>Name</th>
+                <th>Address</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in residents_results %}
+              <tr>
+                <td>{{ r.id }}</td>
+                <td>{{ r.barangay_id or '—' }}</td>
+                <td>
+                  <a href="{{ url_for('main.resident_profile', resident_id=r.id) }}" class="text-decoration-none">
+                    {{ r.last_name }}, {{ r.first_name }}
+                  </a>
+                </td>
+                <td>{{ r.address }}</td>
+                <td>
+                  {% if r.is_archived %}
+                    <span class="badge bg-secondary">Archived</span>
+                  {% else %}
+                    <span class="badge bg-success">Active</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-muted p-3">No residents found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <div class="fw-semibold">Documents</div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.list_documents', q=q, status=status, type=type_id) }}">View all documents</a>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Resident</th>
+                <th>Type</th>
+                <th>Issue Date</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for doc in documents_results %}
+              <tr>
+                <td>{{ doc.id }}</td>
+                <td>
+                  <a href="{{ url_for('main.resident_profile', resident_id=doc.resident_id) }}" class="text-decoration-none">
+                    {{ doc.resident.last_name }}, {{ doc.resident.first_name }}
+                  </a>
+                </td>
+                <td>{{ doc.document_type.name if doc.document_type else '—' }}</td>
+                <td>{{ doc.issue_date.strftime('%Y-%m-%d') if doc.issue_date else '—' }}</td>
+                <td>
+                  {% if doc.is_archived %}
+                    <span class="badge bg-secondary">Archived</span>
+                  {% elif doc.status == 'draft' %}
+                    <span class="badge bg-warning text-dark">Draft</span>
+                  {% elif doc.status == 'pending' %}
+                    <span class="badge bg-secondary">Pending</span>
+                  {% elif doc.status == 'approved' %}
+                    <span class="badge bg-info text-dark">Approved</span>
+                  {% else %}
+                    <span class="badge bg-success">Issued</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-muted p-3">No documents found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% elif scope == 'documents' %}
+    <div class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Resident</th>
+                <th>Type</th>
+                <th>Issue Date</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for doc in results %}
+              <tr>
+                <td>{{ doc.id }}</td>
+                <td>
+                  <a href="{{ url_for('main.resident_profile', resident_id=doc.resident_id) }}" class="text-decoration-none">
+                    {{ doc.resident.last_name }}, {{ doc.resident.first_name }}
+                  </a>
+                </td>
+                <td>{{ doc.document_type.name if doc.document_type else '—' }}</td>
+                <td>{{ doc.issue_date.strftime('%Y-%m-%d') if doc.issue_date else '—' }}</td>
+                <td>
+                  {% if doc.is_archived %}
+                    <span class="badge bg-secondary">Archived</span>
+                  {% elif doc.status == 'draft' %}
+                    <span class="badge bg-warning text-dark">Draft</span>
+                  {% elif doc.status == 'pending' %}
+                    <span class="badge bg-secondary">Pending</span>
+                  {% elif doc.status == 'approved' %}
+                    <span class="badge bg-info text-dark">Approved</span>
+                  {% else %}
+                    <span class="badge bg-success">Issued</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-muted p-3">No documents found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Barangay ID</th>
+                <th>Name</th>
+                <th>Address</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in results %}
+              <tr>
+                <td>{{ r.id }}</td>
+                <td>{{ r.barangay_id or '—' }}</td>
+                <td>
+                  <a href="{{ url_for('main.resident_profile', resident_id=r.id) }}" class="text-decoration-none">
+                    {{ r.last_name }}, {{ r.first_name }}
+                  </a>
+                </td>
+                <td>{{ r.address }}</td>
+                <td>
+                  {% if r.is_archived %}
+                    <span class="badge bg-secondary">Archived</span>
+                  {% else %}
+                    <span class="badge bg-success">Active</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-muted p-3">No residents found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if scope != 'all' %}
+    {% include '_pagination.html' %}
+  {% endif %}
+{% else %}
+  <p class="text-muted">Enter a search term to get started.</p>
+{% endif %}
+
+<script>
+(() => {
+  const scope = document.querySelector('select[name="scope"]');
+  const docOnly = document.querySelectorAll('.doc-only');
+  function toggleFilters() {
+    const showDocs = scope && scope.value !== 'residents';
+    docOnly.forEach(el => { el.style.display = showDocs ? '' : 'none'; });
+  }
+  if (scope) {
+    scope.addEventListener('change', toggleFilters);
+    toggleFilters();
+  }
+})();
+</script>
+{% endblock %}

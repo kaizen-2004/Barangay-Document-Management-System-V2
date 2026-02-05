@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Verify Sign-In</h2>
+<p>We sent a verification code to your email. Enter it to continue.</p>
+<form method="post" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="form-group">
+        {{ form.otp_code.label(class_="form-label") }}
+        {{ form.otp_code(class_="form-control", placeholder="Enter verification code") }}
+        {% for error in form.otp_code.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-primary">Verify</button>
+    <a href="{{ url_for('auth.login') }}" class="btn btn-secondary">Back to Login</a>
+</form>
+{% endblock %}

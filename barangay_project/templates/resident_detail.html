@@ -1,0 +1,189 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-0">Resident Profile</h2>
+    <div class="text-muted small">Full history for this resident.</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.list_residents') }}">Back to Residents</a>
+    {% if not resident.is_archived %}
+      <a class="btn btn-primary" href="{{ url_for('main.edit_resident', resident_id=resident.id) }}">Edit</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-center">
+      <div class="col-md-2">
+        {% if resident.photo_path %}
+          <img src="{{ url_for('static', filename=resident.photo_path) }}" alt="Photo" class="img-fluid rounded" style="max-width: 160px;">
+        {% else %}
+          <div class="text-muted small">No photo</div>
+        {% endif %}
+      </div>
+      <div class="col-md-10">
+        <div class="d-flex flex-wrap gap-3">
+          <div>
+            <div class="text-muted small">Name</div>
+            <div class="fw-semibold">{{ resident.last_name }}, {{ resident.first_name }} {% if resident.middle_name %}{{ resident.middle_name[0] }}.{% endif %}</div>
+          </div>
+          <div>
+            <div class="text-muted small">Barangay ID</div>
+            <div class="fw-semibold">{{ resident.barangay_id or '—' }}</div>
+          </div>
+          <div>
+            <div class="text-muted small">Birth Date</div>
+            <div class="fw-semibold">{{ resident.birth_date.strftime('%Y-%m-%d') }}</div>
+          </div>
+          <div>
+            <div class="text-muted small">Marital Status</div>
+            <div class="fw-semibold">{{ resident.marital_status or '—' }}</div>
+          </div>
+          <div>
+            <div class="text-muted small">Gender</div>
+            <div class="fw-semibold">{{ resident.gender }}</div>
+          </div>
+          <div>
+            <div class="text-muted small">Address</div>
+            <div class="fw-semibold">{{ resident.address }}</div>
+          </div>
+          <div>
+            <div class="text-muted small">Status</div>
+            {% if resident.is_archived %}
+              <span class="badge bg-secondary">Archived</span>
+            {% else %}
+              <span class="badge bg-success">Active</span>
+            {% endif %}
+          </div>
+          <div>
+            <div class="text-muted small">Last Updated</div>
+            <div class="fw-semibold">
+              {{ (resident.updated_at or resident.created_at).strftime('%Y-%m-%d %H:%M') if (resident.updated_at or resident.created_at) else '—' }}
+            </div>
+            <div class="small text-muted">{{ resident_updated_by or '—' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if not resident.is_archived %}
+<div class="card mb-3">
+  <div class="card-header bg-transparent">
+    <div class="fw-semibold">Quick Issue</div>
+    <div class="text-muted small">Create a draft with the resident pre-selected.</div>
+  </div>
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2">
+      {% for dt in document_types %}
+        <a class="btn btn-outline-success btn-sm" href="{{ url_for('main.issue_document', resident_id=resident.id, document_type_id=dt.id) }}">{{ dt.name }}</a>
+      {% else %}
+        <span class="text-muted">No document types configured.</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header bg-transparent d-flex flex-wrap gap-2 align-items-center justify-content-between">
+    <div>
+      <div class="fw-semibold">Document History</div>
+      <div class="text-muted small">All documents for this resident.</div>
+    </div>
+    <form method="get" class="d-flex gap-2">
+      <select name="status" class="form-select form-select-sm" style="min-width: 140px;">
+        <option value="" {% if not doc_status %}selected{% endif %}>All Status</option>
+        <option value="draft" {% if doc_status == 'draft' %}selected{% endif %}>Draft</option>
+        <option value="pending" {% if doc_status == 'pending' %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if doc_status == 'approved' %}selected{% endif %}>Approved</option>
+        <option value="issued" {% if doc_status == 'issued' %}selected{% endif %}>Issued</option>
+      </select>
+      <div class="form-check align-self-center">
+        <input class="form-check-input" type="checkbox" name="archived" value="1" id="archived" {% if show_archived %}checked{% endif %}>
+        <label class="form-check-label small" for="archived">Include archived</label>
+      </div>
+      <button class="btn btn-sm btn-primary" type="submit">Filter</button>
+    </form>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Type</th>
+            <th>Issue Date</th>
+            <th>Updated</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in documents %}
+          <tr>
+            <td>{{ doc.document_type.name if doc.document_type else '—' }}</td>
+            <td>{{ doc.issue_date.strftime('%Y-%m-%d') if doc.issue_date else '—' }}</td>
+            <td>
+              {% set last_at = doc.updated_at or doc.issued_at or doc.created_at %}
+              {% set last_user_id = doc.updated_by_id or doc.issued_by_id or doc.created_by_id %}
+              <div class="small">{{ last_at.strftime('%Y-%m-%d %H:%M') if last_at else '—' }}</div>
+              <div class="small text-muted">{{ user_map.get(last_user_id, '—') }}</div>
+            </td>
+            <td>
+              {% if doc.is_archived %}
+                <span class="badge bg-secondary">Archived</span>
+              {% elif doc.status == 'draft' %}
+                <span class="badge bg-warning text-dark">Draft</span>
+              {% elif doc.status == 'pending' %}
+                <span class="badge bg-secondary">Pending</span>
+              {% elif doc.status == 'approved' %}
+                <span class="badge bg-info text-dark">Approved</span>
+              {% else %}
+                <span class="badge bg-success">Issued</span>
+              {% endif %}
+            </td>
+            <td class="text-nowrap table-actions">
+              {% if doc.status == 'issued' and doc.file_path %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}" target="_blank" rel="noopener">Print</a>
+              {% endif %}
+              {% if not resident.is_archived and doc.document_type_id %}
+                <a class="btn btn-sm btn-outline-success" href="{{ url_for('main.issue_document', resident_id=resident.id, document_type_id=doc.document_type_id) }}">Issue Same</a>
+              {% endif %}
+              {% if not doc.is_archived and doc.status == 'draft' %}
+                <a class="btn btn-sm btn-primary" href="{{ url_for('main.edit_document', document_id=doc.id) }}">Edit</a>
+              {% endif %}
+              {% if not doc.is_archived and doc.status == 'draft' and current_user.role == 'clerk' %}
+                <form method="POST" action="{{ url_for('main.request_document_approval', document_id=doc.id) }}" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-outline-info">Request Approval</button>
+                </form>
+              {% endif %}
+              {% if not doc.is_archived and doc.status in ['draft', 'pending'] and current_user.role == 'admin' %}
+                <form method="POST" action="{{ url_for('main.approve_document', document_id=doc.id) }}" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-outline-info">Approve</button>
+                </form>
+              {% endif %}
+              {% if not doc.is_archived and doc.status == 'approved' %}
+                <form method="POST" action="{{ url_for('main.finalize_document_issue', document_id=doc.id) }}" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-outline-success">Issue</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted p-3">No documents found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% include '_pagination.html' %}
+{% endblock %}

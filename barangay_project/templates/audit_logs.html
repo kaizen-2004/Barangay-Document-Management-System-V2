@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Audit Logs{% endblock %}
+
+{% import "_log_helpers.html" as loghelpers %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h2 class="mb-0">Audit Logs</h2>
+    <div class="text-muted small">Plain-language activity history (sign-ins, edits, prints, and exports).</div>
+  </div>
+  <form class="d-flex" method="get">
+    <input class="form-control me-2" name="q" value="{{ q }}" placeholder="Search action or user">
+    <button class="btn btn-outline-primary" type="submit">Search</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 190px;">When</th>
+            <th style="width: 180px;">Who</th>
+            <th>What happened</th>
+            <th style="width: 180px;">Item</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in logs %}
+          <tr>
+            <td class="small text-muted">{{ loghelpers.pretty_time(l.timestamp) }}</td>
+            <td>{{ l.user.username if l.user else 'System' }}</td>
+            <td>{{ loghelpers.pretty_action(l.action) }}</td>
+            <td class="small text-muted">{{ loghelpers.pretty_entity(l.entity_type, l.entity_id) or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-muted p-3">No logs yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% include '_pagination.html' %}
+{% endblock %}

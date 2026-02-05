@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h2>{{ 'Archived Documents' if archived_view else 'Documents' }}</h2>
+    <div class="page-header-actions d-flex flex-wrap gap-2">
+      {% if archived_view %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('main.list_documents') }}">Back to Active</a>
+      {% else %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('main.list_archived_documents') }}">View Archived</a>
+        <a class="btn btn-success" href="{{ url_for('main.issue_document') }}">Create Draft</a>
+      {% endif %}
+    </div>
+</div>
+
+{% if not archived_view and documents %}
+  <form id="bulk-archive-docs" method="post" action="{{ url_for('main.bulk_archive_documents') }}" class="mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-danger btn-sm" id="bulk-archive-docs-btn" disabled>Archive Selected</button>
+  </form>
+{% endif %}
+
+<form method="get" action="{{ url_for('main.list_archived_documents') if archived_view else url_for('main.list_documents') }}" class="card card-body mb-3">
+  <div class="filter-bar d-flex flex-lg-nowrap flex-wrap gap-2 align-items-end">
+    <div class="flex-grow-1" style="min-width: 240px;">
+      <label class="form-label small mb-1" for="q">Search</label>
+      <input id="q" name="q" class="form-control" placeholder="Resident name or details..." value="{{ q }}">
+    </div>
+
+    <div style="min-width: 190px;">
+      <label class="form-label small mb-1" for="type">Type</label>
+      <select id="type" name="type" class="form-select">
+        <option value="">All</option>
+        {% for dt in document_types %}
+          <option value="{{ dt.id }}" {% if type_id == (dt.id|string) %}selected{% endif %}>{{ dt.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="min-width: 160px;">
+      <label class="form-label small mb-1" for="status">Status</label>
+      <select id="status" name="status" class="form-select">
+        <option value="" {% if not status %}selected{% endif %}>All</option>
+        <option value="draft" {% if status == "draft" %}selected{% endif %}>Draft</option>
+        <option value="pending" {% if status == "pending" %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if status == "approved" %}selected{% endif %}>Approved</option>
+        <option value="issued" {% if status == "issued" %}selected{% endif %}>Issued</option>
+      </select>
+    </div>
+
+    <div style="min-width: 150px;">
+      <label class="form-label small mb-1" for="from">From</label>
+      <input id="from" name="from" type="date" class="form-control" value="{{ date_from }}">
+    </div>
+
+    <div style="min-width: 150px;">
+      <label class="form-label small mb-1" for="to">To</label>
+      <input id="to" name="to" type="date" class="form-control" value="{{ date_to }}">
+    </div>
+
+    <div style="min-width: 200px;">
+      <label class="form-label small mb-1" for="sort">Sort</label>
+      <select id="sort" name="sort" class="form-select">
+        <option value="issue_desc" {% if sort == "issue_desc" %}selected{% endif %}>Newest</option>
+        <option value="issue_asc" {% if sort == "issue_asc" %}selected{% endif %}>Oldest</option>
+        <option value="type_asc" {% if sort == "type_asc" %}selected{% endif %}>Type (A–Z)</option>
+        <option value="type_desc" {% if sort == "type_desc" %}selected{% endif %}>Type (Z–A)</option>
+        <option value="resident_asc" {% if sort == "resident_asc" %}selected{% endif %}>Resident (A–Z)</option>
+        <option value="resident_desc" {% if sort == "resident_desc" %}selected{% endif %}>Resident (Z–A)</option>
+      </select>
+    </div>
+
+    <div class="filter-actions d-flex gap-2 ms-lg-auto" style="min-width: 160px;">
+      <button class="btn btn-primary" type="submit">Apply</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('main.list_archived_documents') if archived_view else url_for('main.list_documents') }}">Reset</a>
+    </div>
+  </div>
+</form>
+{% if documents %}
+<div class="table-responsive">
+<table class="table table-striped">
+    <thead>
+        <tr>
+            {% if not archived_view %}
+              <th class="text-center" style="width: 32px;">
+                <input class="form-check-input" type="checkbox" id="select-all-docs" aria-label="Select all documents">
+              </th>
+            {% endif %}
+            <th>Resident</th>
+            <th>Document Type</th>
+            <th>Details</th>
+            <th>Issued</th>
+            <th>Updated</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for doc in documents %}
+        <tr>
+            {% if not archived_view %}
+              <td class="text-center">
+                <input class="form-check-input doc-select" type="checkbox" name="document_ids" value="{{ doc.id }}" form="bulk-archive-docs" aria-label="Select document {{ doc.id }}">
+              </td>
+            {% endif %}
+            <td>
+              <a href="{{ url_for('main.resident_profile', resident_id=doc.resident_id) }}" class="text-decoration-none">
+                {{ doc.resident.last_name }}, {{ doc.resident.first_name }}
+              </a>
+            </td>
+            <td>{{ doc.document_type.name }}</td>
+            <td>{{ doc.details or '' }}</td>
+            <td>{{ doc.issue_date.strftime('%Y-%m-%d') }}</td>
+            <td>
+              {% set last_at = doc.updated_at or doc.issued_at or doc.created_at %}
+              {% set last_user_id = doc.updated_by_id or doc.issued_by_id or doc.created_by_id %}
+              <div class="small">{{ last_at.strftime('%Y-%m-%d %H:%M') if last_at else '—' }}</div>
+              <div class="small text-muted">{{ user_map.get(last_user_id, '—') }}</div>
+            </td>
+            <td>
+                {% if doc.is_archived %}
+                    <span class="badge bg-secondary">Archived</span>
+                {% elif doc.status == "draft" %}
+                    <span class="badge bg-warning text-dark">Draft</span>
+                {% elif doc.status == "pending" %}
+                    <span class="badge bg-secondary">Pending</span>
+                {% elif doc.status == "approved" %}
+                    <span class="badge bg-info text-dark">Approved</span>
+                {% else %}
+                    <span class="badge bg-success">Issued</span>
+                {% endif %}
+            </td>
+            <td class="text-nowrap table-actions">
+                <div class="action-group">
+                  <div class="action-main">
+                    {% if doc.status == "issued" and doc.file_path %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}" target="_blank" rel="noopener">Print</a>
+                    {% endif %}
+                    {% if not doc.is_archived and doc.status == "issued" %}
+                        <form method="POST" action="{{ url_for('main.revise_document', document_id=doc.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Revise</button>
+                        </form>
+                    {% endif %}
+                    {% if not doc.is_archived and doc.status == "draft" %}
+                        <a class="btn btn-sm btn-primary" href="{{ url_for('main.edit_document', document_id=doc.id) }}">Edit</a>
+                    {% endif %}
+                    {% if not doc.is_archived and doc.status == "draft" and current_user.role == 'clerk' %}
+                        <form method="POST" action="{{ url_for('main.request_document_approval', document_id=doc.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-info">Request Approval</button>
+                        </form>
+                    {% endif %}
+                    {% if not doc.is_archived and doc.status in ["draft", "pending"] and current_user.role == 'admin' %}
+                        <form method="POST" action="{{ url_for('main.approve_document', document_id=doc.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-info">Approve</button>
+                        </form>
+                    {% endif %}
+                    {% if not doc.is_archived and doc.status == "approved" %}
+                        <form method="POST" action="{{ url_for('main.finalize_document_issue', document_id=doc.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-success">Issue</button>
+                        </form>
+                    {% endif %}
+                    {% if doc.is_archived %}
+                        <form method="POST" action="{{ url_for('main.restore_document', document_id=doc.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary">Restore</button>
+                        </form>
+                    {% endif %}
+                  </div>
+                  {% if not doc.is_archived %}
+                  <div class="dropdown action-more">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                      More
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="{{ url_for('main.document_history', document_id=doc.id) }}">History</a></li>
+                      <li>
+                        <form method="POST" action="{{ url_for('main.delete_document', document_id=doc.id) }}" class="m-0">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <button type="submit" class="dropdown-item text-danger">Archive</button>
+                        </form>
+                      </li>
+                    </ul>
+                  </div>
+                  {% endif %}
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p>No documents found.</p>
+{% endif %}
+{% include '_pagination.html' %}
+
+{% if not archived_view and documents %}
+<script>
+(() => {
+  const selectAll = document.getElementById('select-all-docs');
+  const selects = document.querySelectorAll('.doc-select');
+  const bulkBtn = document.getElementById('bulk-archive-docs-btn');
+  if (!selectAll || !selects.length || !bulkBtn) return;
+
+  function syncButton() {
+    bulkBtn.disabled = !Array.from(selects).some(cb => cb.checked);
+  }
+
+  selectAll.addEventListener('change', () => {
+    selects.forEach(cb => { cb.checked = selectAll.checked; });
+    syncButton();
+  });
+
+  selects.forEach(cb => cb.addEventListener('change', syncButton));
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h2>{{ 'Archived Residents' if archived_view else 'Residents' }}</h2>
+    <div class="page-header-actions d-flex flex-wrap gap-2">
+      {% if archived_view %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('main.list_residents') }}">Back to Active</a>
+      {% else %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('main.list_archived_residents') }}">View Archived</a>
+        <a class="btn btn-primary" href="{{ url_for('main.add_resident') }}">Add Resident</a>
+      {% endif %}
+    </div>
+</div>
+
+{% if not archived_view and residents %}
+  <form id="bulk-archive-residents" method="post" action="{{ url_for('main.bulk_archive_residents') }}" class="mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-danger btn-sm" id="bulk-archive-residents-btn" disabled>Archive Selected</button>
+  </form>
+{% endif %}
+
+<form method="get" action="{{ url_for('main.list_archived_residents') if archived_view else url_for('main.list_residents') }}" class="card card-body mb-3">
+  <div class="filter-bar d-flex flex-lg-nowrap flex-wrap gap-2 align-items-end">
+    <div class="flex-grow-1" style="min-width: 240px;">
+      <label class="form-label mb-1">Search</label>
+      <input class="form-control" name="q" value="{{ q }}" placeholder="Search name, Barangay ID, or address">
+    </div>
+    <div style="min-width: 190px;">
+      <label class="form-label mb-1">Gender</label>
+      <select class="form-select" name="gender">
+        <option value="" {% if not gender %}selected{% endif %}>All</option>
+        <option value="Male" {% if gender=='Male' %}selected{% endif %}>Male</option>
+        <option value="Female" {% if gender=='Female' %}selected{% endif %}>Female</option>
+      </select>
+    </div>
+    <div style="min-width: 220px;">
+      <label class="form-label mb-1">Sort</label>
+      <select class="form-select" name="sort">
+        <option value="name_asc" {% if sort=='name_asc' %}selected{% endif %}>Name (A–Z)</option>
+        <option value="name_desc" {% if sort=='name_desc' %}selected{% endif %}>Name (Z–A)</option>
+        <option value="added_desc" {% if sort=='added_desc' %}selected{% endif %}>Added (Newest)</option>
+        <option value="added_asc" {% if sort=='added_asc' %}selected{% endif %}>Added (Oldest)</option>
+        <option value="barangay_id_asc" {% if sort=='barangay_id_asc' %}selected{% endif %}>Barangay ID (A–Z)</option>
+      </select>
+    </div>
+    <div class="filter-actions d-flex gap-2 ms-lg-auto" style="min-width: 160px;">
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('main.list_archived_residents') if archived_view else url_for('main.list_residents') }}">Reset</a>
+    </div>
+  </div>
+</form>
+{% if residents %}
+<div class="table-responsive">
+<table class="table table-striped">
+    <thead>
+        <tr>
+            {% if not archived_view %}
+              <th class="text-center" style="width: 32px;">
+                <input class="form-check-input" type="checkbox" id="select-all-residents" aria-label="Select all residents">
+              </th>
+            {% endif %}
+            <th>Barangay ID</th>
+            <th>Name</th>
+          <th>Photo</th>
+            <th>Gender</th>
+            <th>Birth Date</th>
+            <th>Address</th>
+            <th>Added</th>
+            <th>Updated</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in residents %}
+        <tr>
+            {% if not archived_view %}
+              <td class="text-center">
+                <input class="form-check-input resident-select" type="checkbox" name="resident_ids" value="{{ r.id }}" form="bulk-archive-residents" aria-label="Select resident {{ r.id }}">
+              </td>
+            {% endif %}
+            <td>{{ r.barangay_id or '—' }}</td>
+            <td>
+              <a href="{{ url_for('main.resident_profile', resident_id=r.id) }}" class="text-decoration-none">
+                {{ r.last_name }}, {{ r.first_name }} {% if r.middle_name %}{{ r.middle_name[0] }}.{% endif %}
+              </a>
+            </td>
+            <td>
+              {% if r.photo_path %}
+                <img src="{{ url_for('static', filename=r.photo_path) }}" alt="Photo" style="width:48px;height:48px;object-fit:cover;border-radius:10px;border:1px solid rgba(0,0,0,.12);">
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>{{ r.gender }}</td>
+            <td>{{ r.birth_date.strftime('%Y-%m-%d') }}</td>
+            <td>{{ r.address }}</td>
+            <td>{{ r.created_at.strftime('%Y-%m-%d') }}</td>
+            <td>
+              {% set last_at = r.updated_at or r.created_at %}
+              {% set last_user_id = r.updated_by_id or r.created_by_id %}
+              <div class="small">{{ last_at.strftime('%Y-%m-%d %H:%M') if last_at else '—' }}</div>
+              <div class="small text-muted">{{ user_map.get(last_user_id, '—') }}</div>
+            </td>
+            <td>
+              {% if r.is_archived %}
+                <span class="badge bg-secondary">Archived</span>
+              {% else %}
+                <span class="badge bg-success">Active</span>
+              {% endif %}
+            </td>
+            <td class="text-nowrap table-actions">
+                {% if not r.is_archived %}
+                  <div class="action-group">
+                    <div class="action-main">
+                      <a class="btn btn-sm btn-outline-success" href="{{ url_for('main.issue_document', resident_id=r.id) }}">New Doc</a>
+                      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.edit_resident', resident_id=r.id) }}">Edit</a>
+                    </div>
+                    <div class="dropdown action-more">
+                      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        More
+                      </button>
+                      <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{{ url_for('main.resident_profile', resident_id=r.id) }}">View</a></li>
+                        <li>
+                          <form class="m-0" method="post" action="{{ url_for('main.delete_resident', resident_id=r.id) }}" onsubmit="return confirm('Archive this resident and associated documents?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="dropdown-item text-danger">Archive</button>
+                          </form>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                {% else %}
+                  <form class="d-inline" method="post" action="{{ url_for('main.restore_resident', resident_id=r.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Restore</button>
+                  </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p>No residents found. Click "Add Resident" to create one.</p>
+{% endif %}
+{% include '_pagination.html' %}
+
+{% if not archived_view and residents %}
+<script>
+(() => {
+  const selectAll = document.getElementById('select-all-residents');
+  const selects = document.querySelectorAll('.resident-select');
+  const bulkBtn = document.getElementById('bulk-archive-residents-btn');
+  if (!selectAll || !selects.length || !bulkBtn) return;
+
+  function syncButton() {
+    bulkBtn.disabled = !Array.from(selects).some(cb => cb.checked);
+  }
+
+  selectAll.addEventListener('change', () => {
+    selects.forEach(cb => { cb.checked = selectAll.checked; });
+    syncButton();
+  });
+
+  selects.forEach(cb => cb.addEventListener('change', syncButton));
+})();
+</script>
+{% endif %}
+{% endblock %}
