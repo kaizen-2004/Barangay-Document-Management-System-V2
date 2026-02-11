@@ -99,8 +99,6 @@
       <select name="status" class="form-select form-select-sm" style="min-width: 140px;">
         <option value="" {% if not doc_status %}selected{% endif %}>All Status</option>
         <option value="draft" {% if doc_status == 'draft' %}selected{% endif %}>Draft</option>
-        <option value="pending" {% if doc_status == 'pending' %}selected{% endif %}>Pending</option>
-        <option value="approved" {% if doc_status == 'approved' %}selected{% endif %}>Approved</option>
         <option value="issued" {% if doc_status == 'issued' %}selected{% endif %}>Issued</option>
       </select>
       <div class="form-check align-self-center">
@@ -136,12 +134,8 @@
             <td>
               {% if doc.is_archived %}
                 <span class="badge bg-secondary">Archived</span>
-              {% elif doc.status == 'draft' %}
+              {% elif doc.status in ['draft', 'pending', 'approved'] %}
                 <span class="badge bg-warning text-dark">Draft</span>
-              {% elif doc.status == 'pending' %}
-                <span class="badge bg-secondary">Pending</span>
-              {% elif doc.status == 'approved' %}
-                <span class="badge bg-info text-dark">Approved</span>
               {% else %}
                 <span class="badge bg-success">Issued</span>
               {% endif %}
@@ -153,22 +147,10 @@
               {% if not resident.is_archived and doc.document_type_id %}
                 <a class="btn btn-sm btn-outline-success" href="{{ url_for('main.issue_document', resident_id=resident.id, document_type_id=doc.document_type_id) }}">Issue Same</a>
               {% endif %}
-              {% if not doc.is_archived and doc.status == 'draft' %}
+              {% if not doc.is_archived and doc.status in ['draft', 'pending', 'approved'] %}
                 <a class="btn btn-sm btn-primary" href="{{ url_for('main.edit_document', document_id=doc.id) }}">Edit</a>
               {% endif %}
-              {% if not doc.is_archived and doc.status == 'draft' and current_user.role == 'clerk' %}
-                <form method="POST" action="{{ url_for('main.request_document_approval', document_id=doc.id) }}" class="d-inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn btn-sm btn-outline-info">Request Approval</button>
-                </form>
-              {% endif %}
-              {% if not doc.is_archived and doc.status in ['draft', 'pending'] and current_user.role == 'admin' %}
-                <form method="POST" action="{{ url_for('main.approve_document', document_id=doc.id) }}" class="d-inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn btn-sm btn-outline-info">Approve</button>
-                </form>
-              {% endif %}
-              {% if not doc.is_archived and doc.status == 'approved' %}
+              {% if not doc.is_archived and doc.status in ['draft', 'pending', 'approved'] %}
                 <form method="POST" action="{{ url_for('main.finalize_document_issue', document_id=doc.id) }}" class="d-inline">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn btn-sm btn-outline-success">Issue</button>

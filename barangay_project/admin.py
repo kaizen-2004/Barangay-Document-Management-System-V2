@@ -9,6 +9,7 @@ restricted to authenticated users with the 'admin' role.
 import os
 import shutil
 import subprocess
+from werkzeug.utils import secure_filename
 from datetime import datetime, timezone
 
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, send_file
@@ -44,15 +45,35 @@ def _backup_db(backup_dir: str) -> str:
 
 def _restore_db(backup_path: str) -> None:
     url = current_app.config.get("SQLALCHEMY_DATABASE_URI") or ""
+    db.session.remove()
+    db.engine.dispose()
     if url.startswith("sqlite:///"):
         db_path = url.replace("sqlite:///", "", 1)
         if db_path == ":memory:":
             raise RuntimeError("Cannot restore an in-memory SQLite database.")
+        if not backup_path.endswith((".sqlite", ".db")):
+            raise RuntimeError("Selected backup does not look like a SQLite file.")
         shutil.copy2(backup_path, db_path)
         return
 
-    cmd = ["pg_restore", "--clean", "--if-exists", "-d", url, backup_path]
-    subprocess.run(cmd, check=True)
+    if not backup_path.endswith((".dump", ".backup", ".tar")):
+        raise RuntimeError("Selected backup does not look like a PostgreSQL dump.")
+
+    cmd = [
+        "pg_restore",
+        "--clean",
+        "--if-exists",
+        "--no-owner",
+        "--no-privileges",
+        "-d",
+        url,
+        backup_path,
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or str(exc)).strip()
+        raise RuntimeError(detail) from exc
 
 
 def _list_backups(backup_dir: str) -> list[dict]:
@@ -404,8 +425,17 @@ def restore_backup():
     if upload and upload.filename:
         # Save uploaded file into backup dir for restore
         os.makedirs(backup_dir, exist_ok=True)
-        restore_path = os.path.abspath(os.path.join(backup_dir, upload.filename))
-        upload.save(restore_path)
+        safe_name = secure_filename(upload.filename)
+        if not safe_name:
+            flash("Invalid upload filename.", "warning")
+            return redirect(url_for("admin.backups"))
+        restore_path = os.path.abspath(os.path.join(backup_dir, safe_name))
+        try:
+            upload.save(restore_path)
+        except Exception as exc:
+            current_app.logger.exception("Failed to save uploaded backup: %s", exc)
+            flash(f"Upload failed: {exc}", "danger")
+            return redirect(url_for("admin.backups"))
         temp_uploaded = True
     elif filename:
         restore_path = os.path.abspath(os.path.join(backup_dir, filename))

@@ -57,7 +57,6 @@
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.global_search') }}">Search</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.list_residents') }}">Residents</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.list_documents') }}">Documents</a></li>
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.issue_document') }}">New Document</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.reports') }}">Reports</a></li>
 
           {% if current_user.role == 'admin' %}

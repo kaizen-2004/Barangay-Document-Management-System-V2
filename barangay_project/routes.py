@@ -30,6 +30,7 @@ from .time_utils import utcnow
 
 
 DOCUMENT_STATUSES = ("draft", "pending", "approved", "issued")
+DRAFT_LIKE_STATUSES = ("draft", "pending", "approved")
 BRGY_ID_PATTERN = re.compile(r"^BRGY-\\d{4}-\\d{5}$", re.IGNORECASE)
 
 
@@ -160,7 +161,10 @@ def global_search():
             if type_id.isdigit():
                 query = query.filter(Document.document_type_id == int(type_id))
             if status in DOCUMENT_STATUSES:
-                query = query.filter(Document.status == status)
+                if status == "draft":
+                    query = query.filter(Document.status.in_(DRAFT_LIKE_STATUSES))
+                else:
+                    query = query.filter(Document.status == status)
             query = query.order_by(Document.issue_date.desc())
             if scope == "documents":
                 pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
@@ -690,7 +694,10 @@ def resident_profile(resident_id: int):
     if not show_archived:
         docs_query = docs_query.filter(Document.is_archived.is_(False))
     if doc_status in DOCUMENT_STATUSES:
-        docs_query = docs_query.filter(Document.status == doc_status)
+        if doc_status == "draft":
+            docs_query = docs_query.filter(Document.status.in_(DRAFT_LIKE_STATUSES))
+        else:
+            docs_query = docs_query.filter(Document.status == doc_status)
     docs_query = docs_query.order_by(Document.issue_date.desc())
 
     pagination = db.paginate(docs_query, page=page, per_page=per_page, error_out=False)
@@ -865,7 +872,10 @@ def list_documents():
         query = query.filter(Document.document_type_id == int(type_id))
 
     if status in DOCUMENT_STATUSES:
-        query = query.filter(Document.status == status)
+        if status == "draft":
+            query = query.filter(Document.status.in_(DRAFT_LIKE_STATUSES))
+        else:
+            query = query.filter(Document.status == status)
 
     # Optional date range (YYYY-MM-DD)
     try:
@@ -949,7 +959,10 @@ def list_archived_documents():
         query = query.filter(Document.document_type_id == int(type_id))
 
     if status in DOCUMENT_STATUSES:
-        query = query.filter(Document.status == status)
+        if status == "draft":
+            query = query.filter(Document.status.in_(DRAFT_LIKE_STATUSES))
+        else:
+            query = query.filter(Document.status == status)
 
     # Optional date range (YYYY-MM-DD)
     try:
@@ -1129,8 +1142,8 @@ def edit_document(document_id: int):
     if document.is_archived:
         flash("Archived documents cannot be edited.", "warning")
         return redirect(url_for("main.list_documents"))
-    if document.status in {"pending", "approved", "issued"}:
-        flash("Only draft documents can be edited.", "warning")
+    if document.status == "issued":
+        flash("Issued documents cannot be edited. Use Revise to create a new draft.", "warning")
         return redirect(url_for("main.list_documents"))
     form = DocumentForm(obj=document)
 
@@ -1191,60 +1204,6 @@ def edit_document(document_id: int):
     return render_template("document_form.html", form=form, title="Edit Document")
 
 
-@main_bp.route("/documents/<int:document_id>/approve", methods=["POST"])
-@login_required
-@roles_required("admin")
-def approve_document(document_id: int):
-    document = db.get_or_404(Document, document_id)
-    if document.is_archived:
-        flash("Archived documents cannot be approved.", "warning")
-        return redirect(url_for("main.list_documents"))
-    if document.status not in {"draft", "pending"}:
-        flash("Only draft or pending documents can be approved.", "warning")
-        return redirect(url_for("main.list_documents"))
-
-    document.status = "approved"
-    document.approved_at = utcnow()
-    document.approved_by_id = current_user.id
-    document.updated_at = utcnow()
-    document.updated_by_id = current_user.id
-    db.session.commit()
-    log_action(
-        f"Approved document #{document.id}",
-        entity_type="document",
-        entity_id=document.id,
-        meta={"status": document.status},
-    )
-    flash("Document approved.", "success")
-    return redirect(url_for("main.list_documents"))
-
-
-@main_bp.route("/documents/<int:document_id>/request-approval", methods=["POST"])
-@login_required
-@roles_required("clerk")
-def request_document_approval(document_id: int):
-    document = db.get_or_404(Document, document_id)
-    if document.is_archived:
-        flash("Archived documents cannot be submitted.", "warning")
-        return redirect(url_for("main.list_documents"))
-    if document.status != "draft":
-        flash("Only draft documents can be submitted for approval.", "warning")
-        return redirect(url_for("main.list_documents"))
-
-    document.status = "pending"
-    document.updated_at = utcnow()
-    document.updated_by_id = current_user.id
-    db.session.commit()
-    log_action(
-        f"Requested approval for document #{document.id}",
-        entity_type="document",
-        entity_id=document.id,
-        meta={"status": document.status},
-    )
-    flash("Approval request sent.", "success")
-    return redirect(url_for("main.list_documents"))
-
-
 @main_bp.route("/documents/<int:document_id>/issue", methods=["POST"])
 @login_required
 @roles_required("admin", "clerk")
@@ -1253,8 +1212,8 @@ def finalize_document_issue(document_id: int):
     if document.is_archived:
         flash("Archived documents cannot be issued.", "warning")
         return redirect(url_for("main.list_documents"))
-    if document.status != "approved":
-        flash("Only approved documents can be issued.", "warning")
+    if document.status not in DRAFT_LIKE_STATUSES:
+        flash("Only draft documents can be issued.", "warning")
         return redirect(url_for("main.list_documents"))
 
     resident = document.resident
@@ -1278,6 +1237,9 @@ def finalize_document_issue(document_id: int):
         flash("Issue date cannot be before the resident's birth date.", "warning")
         return redirect(url_for("main.list_documents"))
 
+    if document.status in {"pending", "approved"}:
+        document.approved_at = None
+        document.approved_by_id = None
     document.status = "issued"
     document.issued_at = utcnow()
     document.issued_by_id = current_user.id
