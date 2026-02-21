@@ -1,5 +1,7 @@
 # Barangay Document Management System (Flask + PostgreSQL)
 
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/5a357bde-f691-4b9e-80b1-c512b2a382c8" />
+
 Manage barangay residents and issue official documents (Barangay ID/Clearance, Residency, Indigency, etc.).
 
 Includes:
