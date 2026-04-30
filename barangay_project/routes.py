@@ -1266,6 +1266,62 @@ def finalize_document_issue(document_id: int):
     return redirect(url_for("main.list_documents"))
 
 
+@main_bp.route("/documents/<int:document_id>/request-approval", methods=["POST"])
+@login_required
+@roles_required("admin", "clerk")
+def request_document_approval(document_id: int):
+    document = db.get_or_404(Document, document_id)
+    if document.is_archived:
+        flash("Archived documents cannot be submitted for approval.", "warning")
+        return redirect(url_for("main.list_documents"))
+    if document.status != "draft":
+        flash("Only draft documents can be submitted for approval.", "warning")
+        return redirect(url_for("main.list_documents"))
+
+    document.status = "pending"
+    document.updated_at = utcnow()
+    document.updated_by_id = current_user.id
+    db.session.commit()
+
+    log_action(
+        f"Requested approval for document #{document.id}",
+        entity_type="document",
+        entity_id=document.id,
+        meta={"status": document.status},
+    )
+    flash("Document submitted for approval.", "success")
+    return redirect(url_for("main.list_documents"))
+
+
+@main_bp.route("/documents/<int:document_id>/approve", methods=["POST"])
+@login_required
+@roles_required("admin")
+def approve_document(document_id: int):
+    document = db.get_or_404(Document, document_id)
+    if document.is_archived:
+        flash("Archived documents cannot be approved.", "warning")
+        return redirect(url_for("main.list_documents"))
+    if document.status != "pending":
+        flash("Only pending documents can be approved.", "warning")
+        return redirect(url_for("main.list_documents"))
+
+    document.status = "approved"
+    document.approved_at = utcnow()
+    document.approved_by_id = current_user.id
+    document.updated_at = utcnow()
+    document.updated_by_id = current_user.id
+    db.session.commit()
+
+    log_action(
+        f"Approved document #{document.id}",
+        entity_type="document",
+        entity_id=document.id,
+        meta={"status": document.status},
+    )
+    flash("Document approved.", "success")
+    return redirect(url_for("main.list_documents"))
+
+
 @main_bp.route("/documents/<int:document_id>/revise", methods=["POST"])
 @login_required
 @roles_required("admin", "clerk")

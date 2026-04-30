@@ -8,10 +8,69 @@ Includes:
 - Admin UI for users + document types
 - PDF generation for issued documents
 
+## On-Prem MVP Deployment (Recommended)
+
+For the current MVP plan (single server PC + LAN access), use:
+
+- `docs/onprem-windows-deployment-checklist.md`
+- `docs/executable-build-and-deploy.md`
+
+This is the easiest path for barangay office deployment without Docker.
+
+## Docker Setup (Optional)
+
+This is the easiest way to run on a target PC without manually installing PostgreSQL.
+
+1. Copy Docker environment file:
+   ```bash
+   cp .env.docker.example .env.docker
+   ```
+2. Edit `.env.docker` and set at least:
+   - `SECRET_KEY`
+   - `POSTGRES_PASSWORD`
+3. Build and start:
+   ```bash
+   docker compose --env-file .env.docker up -d --build
+   ```
+4. Check status/logs:
+   ```bash
+   docker compose --env-file .env.docker ps
+   docker compose --env-file .env.docker logs -f web
+   ```
+5. Open the app:
+   - `http://localhost:5000` (or `http://<target-pc-ip>:5000` on LAN)
+
+Default seeded admin on fresh DB: `admin / admin`.
+
+Useful Docker commands:
+
+- Stop:
+  ```bash
+  docker compose --env-file .env.docker down
+  ```
+- Restart:
+  ```bash
+  docker compose --env-file .env.docker restart web
+  ```
+- Rebuild after code changes:
+  ```bash
+  docker compose --env-file .env.docker up -d --build
+  ```
+- DB backup:
+  ```bash
+  docker compose --env-file .env.docker exec web flask --app wsgi backup-db
+  ```
+- DB restore:
+  ```bash
+  docker compose --env-file .env.docker exec web flask --app wsgi restore-db --path /app/backups/<file> --yes
+  ```
+
+Detailed target-PC deployment guide: `README_DOCKER.md`
+
 ## Prerequisites
 
 * Python 3.10+ (works on 3.13 as well)
-* PostgreSQL server (for production; SQLite can be used temporarily for testing)
+* SQLite (default MVP setup) or PostgreSQL server (optional later scale-up)
 * Pipenv or virtualenv (optional but recommended for dependency management)
 
 ## Getting Started
@@ -22,11 +81,17 @@ Includes:
    python -m venv venv
    source venv/bin/activate  # or venv\Scripts\activate on Windows
    ```
-3. **Install dependencies**:
+3. **Install dependencies (uv)**:
    ```bash
-   pip install -r requirements.txt
+   pip install uv
+   uv sync
    ```
 4. **Configure your database** (recommended):
+   ```bash
+   export DATABASE_URL="sqlite:///barangay_mvp.sqlite"
+   ```
+
+   PostgreSQL option:
    ```bash
    export DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/barangay_db"
    ```
@@ -35,18 +100,18 @@ Includes:
 
    **Option A (recommended): Alembic migrations**
    ```bash
-   flask --app barangay_project.app:create_app db upgrade
+   uv run flask --app barangay_project.app:create_app db upgrade
    ```
 
    **Option B (quick local run): auto-create tables**
    ```bash
    export AUTO_CREATE_DB=true
-   flask --app barangay_project.app:create_app run
+   uv run flask --app barangay_project.app:create_app run
    ```
 
 6. **Run the application**:
    ```bash
-   flask --app barangay_project.app:create_app run
+   uv run flask --app barangay_project.app:create_app run
    ```
    Open your browser at `http://localhost:5000` to see the dashboard.
 
@@ -62,7 +127,7 @@ Change this password after your first login.
 ## Ops & reliability
 
 - Health check: `GET /healthz` (JSON + DB connectivity)
-- Automated backups: `flask --app wsgi backup-db` (uses `BACKUP_DIR` + `BACKUP_RETENTION_DAYS`)
+- Automated backups: `uv run flask --app wsgi backup-db` (uses `BACKUP_DIR` + `BACKUP_RETENTION_DAYS`)
 - Structured logging: set `LOG_JSON=True` (default) and `LOG_LEVEL=INFO`
 - Error reporting: set `ERROR_REPORT_EMAIL` plus your mail settings to receive unhandled exception reports
 - Auto-migrate on deploy: set `AUTO_MIGRATE=True` to run Alembic upgrades on startup
@@ -70,8 +135,7 @@ Change this password after your first login.
 ## Testing
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
+uv run python -m pytest
 ```
 
 ## File Structure

@@ -19,10 +19,11 @@ class Config:
     """Base configuration with default settings."""
 
     SECRET_KEY = os.environ.get("SECRET_KEY", "a-very-secret-key")
-    # Determine database URL: if DATABASE_URL is provided, use it; otherwise, default to PostgreSQL on localhost.
+    # Determine database URL: if DATABASE_URL is provided, use it; otherwise,
+    # default to a local SQLite file for easiest on-prem MVP setup.
     DATABASE_URL = os.environ.get(
         "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/barangay_db",
+        f"sqlite:///{os.path.join(os.getcwd(), 'barangay_mvp.sqlite')}",
     )
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False

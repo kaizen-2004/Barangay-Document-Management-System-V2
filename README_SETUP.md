@@ -3,10 +3,11 @@
 ## 1) Setup
 
 ```bash
+# install uv once (if not yet installed)
+pip install uv
+
 # inside the project folder
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 
 cp .env.example .env
 # edit .env with your real DATABASE_URL and SECRET_KEY
@@ -20,7 +21,7 @@ psql "$DATABASE_URL" -c "\conninfo"
 ## 2) Initialize DB
 
 ```bash
-flask --app wsgi init-db
+uv run flask --app wsgi init-db
 ```
 
 This will:
@@ -30,7 +31,7 @@ This will:
 ## 3) Run
 
 ```bash
-flask --app wsgi run
+uv run flask --app wsgi run
 ```
 
 Open: http://127.0.0.1:5000
@@ -48,11 +49,11 @@ Open: http://127.0.0.1:5000
 ## 5) Ops & reliability
 
 - Health check: `GET /healthz` (returns JSON + DB connectivity)
-- Automated backups: `flask --app wsgi backup-db` (uses `BACKUP_DIR`, retention via `BACKUP_RETENTION_DAYS`)
-- Restore from backup: `flask --app wsgi restore-db --path /path/to/backup.dump --yes`
+- Automated backups: `uv run flask --app wsgi backup-db` (uses `BACKUP_DIR`, retention via `BACKUP_RETENTION_DAYS`)
+- Restore from backup: `uv run flask --app wsgi restore-db --path /path/to/backup.dump --yes`
 - Purge expired documents (issue date + validity):  
-  `flask --app wsgi purge-expired-documents --dry-run`  
-  `flask --app wsgi purge-expired-documents --yes`
+  `uv run flask --app wsgi purge-expired-documents --dry-run`  
+  `uv run flask --app wsgi purge-expired-documents --yes`
 - Structured logging: set `LOG_JSON=True` (default) and `LOG_LEVEL=INFO`
 - Error reporting: set `ERROR_REPORT_EMAIL` plus your mail settings to receive unhandled exception reports
 - Auto-migrate on deploy: set `AUTO_MIGRATE=True` to run `flask db upgrade` on startup
@@ -60,6 +61,13 @@ Open: http://127.0.0.1:5000
 ## 6) Testing
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
+uv run python -m pytest
+```
+
+## 7) Windows production process manager
+
+For on-prem Windows deployment, run the app with Waitress and register it as a Windows service:
+
+```bash
+uv run waitress-serve --host=0.0.0.0 --port=5000 wsgi:app
 ```
