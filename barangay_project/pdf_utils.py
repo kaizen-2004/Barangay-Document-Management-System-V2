@@ -311,7 +311,8 @@ def _build_residency_overlay(doc) -> BytesIO:
     birth_date = xml_escape(_format_date_long(resident.birth_date))
     marital = xml_escape(resident.marital_status or "N/A")
     address = xml_escape(resident.address or "N/A")
-    purpose = xml_escape((doc.details or "").strip() or "N/A")
+    purpose_text = (doc.details or "").strip()
+    purpose = xml_escape((purpose_text or "N/A").upper())
 
     issued_on = _format_date_long(issue_dt)
     valid_until = _format_date_long(_add_months(issue_dt, 6))
@@ -469,11 +470,25 @@ def _build_residency_overlay(doc) -> BytesIO:
     issued_at_y = footer_start_y
     issued_on_y = footer_start_y - 16
     valid_until_y = footer_start_y - 32
-    c.drawString(footer_x, issued_at_y, "Issued At: Barangay Krus Na Ligas")
-    c.drawString(footer_x, issued_on_y, "Issued On:")
-    _draw_underlined_text(c, issued_on, footer_x + 70, issued_on_y, font_size=12)
-    c.drawString(footer_x, valid_until_y, "Valid Until:")
-    _draw_underlined_text(c, valid_until, footer_x + 70, valid_until_y, font_size=12)
+    issued_at_label = "Issued At:"
+    issued_on_label = "Issued On:"
+    valid_until_label = "Valid Until:"
+
+    issued_at_value_x = footer_x + c.stringWidth(f"{issued_at_label} ", "Times-Roman", 12)
+    issued_on_value_x = footer_x + c.stringWidth(f"{issued_on_label} ", "Times-Roman", 12)
+    valid_until_value_x = footer_x + c.stringWidth(f"{valid_until_label} ", "Times-Roman", 12)
+
+    c.setFont("Times-Roman", 12)
+    c.drawString(footer_x, issued_at_y, issued_at_label)
+    _draw_underlined_text(c, "Barangay Krus Na Ligas", issued_at_value_x, issued_at_y, font_size=12)
+
+    c.setFont("Times-Roman", 12)
+    c.drawString(footer_x, issued_on_y, issued_on_label)
+    _draw_underlined_text(c, issued_on, issued_on_value_x, issued_on_y, font_size=12)
+
+    c.setFont("Times-Roman", 12)
+    c.drawString(footer_x, valid_until_y, valid_until_label)
+    _draw_underlined_text(c, valid_until, valid_until_value_x, valid_until_y, font_size=12)
 
     # Prepared by / Reference
     c.setFont("Times-Roman", 12)
@@ -784,7 +799,7 @@ def generate_document_pdf(doc) -> str:
     name = doc_type_name.lower()
     if template_key == "residency" or "residency" in name:
         _generate_residency_pdf(doc, abs_path)
-        rel_path = os.path.join("uploads", "documents", folder, filename)
+        rel_path = f"uploads/documents/{folder}/{filename}"
         return rel_path
 
     c = canvas.Canvas(abs_path, pagesize=LETTER)
@@ -816,5 +831,5 @@ def generate_document_pdf(doc) -> str:
     c.save()
 
     # Path relative to <app_root>/static
-    rel_path = os.path.join("uploads", "documents", folder, filename)
+    rel_path = f"uploads/documents/{folder}/{filename}"
     return rel_path
