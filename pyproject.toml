@@ -1,0 +1,37 @@
+[project]
+name = "barangay-project"
+version = "0.1.0"
+description = "Barangay Document Management System"
+requires-python = ">=3.10"
+dependencies = [
+    "email-validator>=2.0",
+    "flask>=2.3",
+    "flask-login>=0.6",
+    "flask-mail>=0.9",
+    "flask-migrate>=4.0",
+    "flask-sqlalchemy>=3.0",
+    "flask-wtf>=1.1",
+    "gunicorn>=21.2",
+    "openpyxl>=3.1",
+    "pillow>=10.0.0",
+    "psycopg2-binary>=2.9",
+    "pypdf>=4.0",
+    "python-dotenv>=1.0",
+    "reportlab>=4.0",
+    "waitress>=3.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.0",
+    "pytest>=7.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+include = ["barangay_project*"]

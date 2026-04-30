@@ -1,0 +1,61 @@
+name: Build Windows Executable
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run tests
+        run: uv run python -m pytest
+
+      - name: Build executable
+        run: uv run pyinstaller packaging/barangay_server.spec --clean
+
+      - name: Prepare release bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release_bundle | Out-Null
+          Copy-Item dist/barangay_server.exe release_bundle/
+          Copy-Item .env.example release_bundle/
+          Copy-Item docs/onprem-windows-deployment-checklist.md release_bundle/
+          if (Test-Path scripts/windows) {
+            Copy-Item scripts/windows release_bundle/windows-scripts -Recurse
+          }
+          Compress-Archive -Path release_bundle/* -DestinationPath barangay_server_windows_bundle.zip -Force
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: barangay-server-windows
+          path: |
+            dist/barangay_server.exe
+            barangay_server_windows_bundle.zip
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/barangay_server.exe
+            barangay_server_windows_bundle.zip
