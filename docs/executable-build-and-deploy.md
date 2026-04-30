@@ -16,7 +16,7 @@ When triggered by a `v*` tag, the workflow also creates a GitHub Release and att
 Outputs:
 
 - `dist/barangay_server.exe`
-- `barangay_server_windows_bundle.zip` (exe + env sample + deployment checklist + helper scripts)
+- `barangay_server_windows_plug_and_play.zip` (exe + start scripts + env sample + helper scripts)
 
 ## Local build (optional)
 

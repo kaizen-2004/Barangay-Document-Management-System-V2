@@ -37,11 +37,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path release_bundle | Out-Null
           Copy-Item dist/barangay_server.exe release_bundle/
           Copy-Item .env.example release_bundle/
+          if (Test-Path packaging/windows_bundle) {
+            Copy-Item packaging/windows_bundle/* release_bundle/ -Recurse
+          }
           Copy-Item docs/onprem-windows-deployment-checklist.md release_bundle/
           if (Test-Path scripts/windows) {
             Copy-Item scripts/windows release_bundle/windows-scripts -Recurse
           }
-          Compress-Archive -Path release_bundle/* -DestinationPath barangay_server_windows_bundle.zip -Force
+          Compress-Archive -Path release_bundle/* -DestinationPath barangay_server_windows_plug_and_play.zip -Force
 
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
@@ -49,7 +52,7 @@ jobs:
           name: barangay-server-windows
           path: |
             dist/barangay_server.exe
-            barangay_server_windows_bundle.zip
+            barangay_server_windows_plug_and_play.zip
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -58,4 +61,4 @@ jobs:
           generate_release_notes: true
           files: |
             dist/barangay_server.exe
-            barangay_server_windows_bundle.zip
+            barangay_server_windows_plug_and_play.zip

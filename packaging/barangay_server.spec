@@ -3,7 +3,7 @@
 from pathlib import Path
 
 
-ROOT = Path.cwd()
+ROOT = Path(__file__).resolve().parent.parent
 PKG_DIR = ROOT / "barangay_project"
 
 
@@ -25,7 +25,7 @@ datas.extend(_collect_files(PKG_DIR / "static", "barangay_project/static"))
 
 
 a = Analysis(
-    ["run_server.py"],
+    [str(ROOT / "run_server.py")],
     pathex=[str(ROOT)],
     binaries=[],
     datas=datas,
