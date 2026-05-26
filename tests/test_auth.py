@@ -1,6 +1,3 @@
-from barangay_project.models import PasswordReset
-
-
 def test_login_logout(client, make_user):
     user = make_user("clerk", "Clerk123!")
 
@@ -41,35 +38,6 @@ def test_login_rate_limit(client, app, make_user):
     assert b"Too many failed login attempts" in resp.data
 
 
-def test_password_reset_flow(client, make_user):
-    user = make_user("clerk", "OldPass123!", email="clerk@example.com")
-
-    resp = client.post(
-        "/forgot-password",
-        data={"username": user.username},
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
-
-    reset = PasswordReset.query.filter_by(user_id=user.id).first()
-    assert reset is not None
-
-    new_password = "NewPass123!"
-    resp = client.post(
-        "/reset-password",
-        data={
-            "username": user.username,
-            "otp_code": reset.otp_code,
-            "new_password": new_password,
-            "confirm_new_password": new_password,
-        },
-        follow_redirects=False,
-    )
-    assert resp.status_code == 302
-
-    resp = client.post(
-        "/login",
-        data={"username": user.username, "password": new_password},
-        follow_redirects=False,
-    )
-    assert resp.status_code == 302
+def test_forgot_password_route_not_available(client):
+    resp = client.get("/forgot-password", follow_redirects=False)
+    assert resp.status_code == 404

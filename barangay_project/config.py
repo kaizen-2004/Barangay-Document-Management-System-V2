@@ -20,13 +20,19 @@ class Config:
 
     SECRET_KEY = os.environ.get("SECRET_KEY", "a-very-secret-key")
     # Determine database URL: if DATABASE_URL is provided, use it; otherwise,
-    # default to a local SQLite file for easiest on-prem MVP setup.
+    # default to local MySQL/MariaDB (XAMPP-friendly) for offline LAN deployment.
     DATABASE_URL = os.environ.get(
         "DATABASE_URL",
-        f"sqlite:///{os.path.join(os.getcwd(), 'barangay_mvp.sqlite')}",
+        "mysql+pymysql://barangay_user:barangay_password@127.0.0.1:3306/barangay_db?charset=utf8mb4",
     )
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+        "pool_size": int(os.environ.get("DB_POOL_SIZE", 10)),
+        "max_overflow": int(os.environ.get("DB_MAX_OVERFLOW", 20)),
+    }
 
     # Convenience for local development.
     # If true (default), the app will run `db.create_all()` on startup.
@@ -35,7 +41,10 @@ class Config:
     AUTO_CREATE_DB = os.environ.get("AUTO_CREATE_DB", "true").lower() in {"1", "true", "yes", "on"}
 
     # Uploads (images, generated files)
-    UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', os.path.join(os.path.dirname(__file__), 'static', 'uploads'))
+    UPLOAD_FOLDER = os.environ.get(
+        'UPLOAD_FOLDER',
+        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend', 'static', 'uploads')),
+    )
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 5 * 1024 * 1024))  # 5MB
 
     # CSRF: keep tokens valid (avoids "token expired" during long admin sessions)
@@ -50,7 +59,24 @@ class Config:
     AUTO_MIGRATE = os.environ.get("AUTO_MIGRATE", "False") == "True"
     BACKUP_DIR = os.environ.get("BACKUP_DIR", os.path.join(os.getcwd(), "backups"))
     BACKUP_RETENTION_DAYS = int(os.environ.get("BACKUP_RETENTION_DAYS", 7))
+    MYSQLDUMP_BIN = os.environ.get("MYSQLDUMP_BIN", "mysqldump")
+    MYSQL_BIN = os.environ.get("MYSQL_BIN", "mysql")
+    LIBREOFFICE_BIN = os.environ.get("LIBREOFFICE_BIN", "soffice")
+    LIBREOFFICE_TIMEOUT_SECONDS = int(os.environ.get("LIBREOFFICE_TIMEOUT_SECONDS", 90))
     ERROR_REPORT_EMAIL = os.environ.get("ERROR_REPORT_EMAIL", "")
+
+    DOCUMENT_STORAGE_ROOT = os.environ.get(
+        "DOCUMENT_STORAGE_ROOT",
+        os.path.abspath(os.path.join(os.getcwd(), "barangay_data")),
+    )
+    DOCX_TEMPLATE_UPLOAD_DIR = os.environ.get(
+        "DOCX_TEMPLATE_UPLOAD_DIR",
+        os.path.join(DOCUMENT_STORAGE_ROOT, "templates"),
+    )
+    DOCX_OUTPUT_DIR = os.environ.get(
+        "DOCX_OUTPUT_DIR",
+        os.path.join(DOCUMENT_STORAGE_ROOT, "generated"),
+    )
 
     # Automatic cleanup of expired documents (issue date + validity window)
     AUTO_PURGE_EXPIRED = os.environ.get("AUTO_PURGE_EXPIRED", "True") == "True"
@@ -69,10 +95,6 @@ class Config:
     # Login rate limiting (per IP and per username)
     LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("LOGIN_RATE_LIMIT_WINDOW_SECONDS", 600))
     LOGIN_RATE_LIMIT_MAX = int(os.environ.get("LOGIN_RATE_LIMIT_MAX", 5))
-
-    # Admin MFA (email OTP)
-    ADMIN_MFA_REQUIRED = os.environ.get("ADMIN_MFA_REQUIRED", "True") == "True"
-    MFA_CODE_TTL_SECONDS = int(os.environ.get("MFA_CODE_TTL_SECONDS", 600))
 
     # Session timeouts
     SESSION_IDLE_TIMEOUT_SECONDS = int(os.environ.get("SESSION_IDLE_TIMEOUT_SECONDS", 1800))
@@ -106,18 +128,6 @@ class Config:
         ),
     )
 
-    # Flask-Mail settings.  These defaults can be overridden by
-    # environment variables.  To enable password reset emails, set
-    # MAIL_SERVER, MAIL_USERNAME and MAIL_PASSWORD in your environment.
-    MAIL_SERVER = os.environ.get("MAIL_SERVER", None)
-    MAIL_PORT = int(os.environ.get("MAIL_PORT", 587)) if os.environ.get("MAIL_PORT") else None
-    MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "True") == "True"
-    MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "False") == "True"
-    MAIL_USERNAME = os.environ.get("MAIL_USERNAME", None)
-    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", None)
-    MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", None)
-
-
 class DevelopmentConfig(Config):
     """Configuration for development environment."""
 
@@ -132,7 +142,10 @@ class ProductionConfig(Config):
 
 
 class TestingConfig(Config):
-    """Configuration for testing (uses an in-memory SQLite DB)."""
+    """Configuration for testing."""
 
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "TEST_DATABASE_URL",
+        "mysql+pymysql://root:@127.0.0.1:3306/barangay_test?charset=utf8mb4",
+    )

@@ -6,16 +6,14 @@ instances across the codebase.
 
 Import these objects everywhere:
 
-    from .extensions import db, login_manager, mail, csrf
+    from .extensions import db, login_manager, csrf
 """
 
 from flask_login import LoginManager
-from flask_mail import Mail
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 
 
 db = SQLAlchemy()
 login_manager = LoginManager()
-mail = Mail()
 csrf = CSRFProtect()

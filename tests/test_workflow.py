@@ -1,8 +1,12 @@
 import os
 from datetime import date
 
+from docx import Document as DocxDocument
+from PIL import Image
+
 from barangay_project.extensions import db
-from barangay_project.models import Document
+from barangay_project.models import Document, Official
+from barangay_project.docx_pipeline import resolve_stored_path_to_abs
 
 
 def _login(client, username, password):
@@ -19,6 +23,43 @@ def test_document_workflow(client, app, make_user, make_resident, make_document_
 
     resident = make_resident(birth_date=date(1990, 1, 1))
     doc_type = make_document_type(name="Test Clearance", requires_photo=False)
+
+    static_uploads = os.path.join(app.static_folder, "uploads")
+    os.makedirs(static_uploads, exist_ok=True)
+    os.makedirs(os.path.join(static_uploads, "doc_templates"), exist_ok=True)
+    os.makedirs(os.path.join(static_uploads, "official_signatures"), exist_ok=True)
+    os.makedirs(os.path.join(app.config["UPLOAD_FOLDER"], "residents"), exist_ok=True)
+
+    template_abs = os.path.join(static_uploads, "doc_templates", "test-clearance.docx")
+    tpl = DocxDocument()
+    tpl.add_paragraph("Resident: {{ resident_name }}")
+    tpl.add_paragraph("Address: {{ address }}")
+    tpl.add_paragraph("Purpose: {{ purpose }}")
+    tpl.add_paragraph("Issue: {{ issue_date }}")
+    tpl.add_paragraph("Photo: {{ resident_photo }}")
+    tpl.add_paragraph("Captain: {{ captain_signature }}")
+    tpl.add_paragraph("QR: {{ qr_code }}")
+    tpl.save(template_abs)
+
+    sig_abs = os.path.join(static_uploads, "official_signatures", "captain-signature.jpg")
+    Image.new("RGB", (300, 80), color=(255, 255, 255)).save(sig_abs)
+
+    resident_photo_abs = os.path.join(app.config["UPLOAD_FOLDER"], "residents", "resident-photo.jpg")
+    Image.new("RGB", (250, 250), color=(200, 200, 200)).save(resident_photo_abs)
+
+    resident.photo_path = "uploads/residents/resident-photo.jpg"
+    doc_type.template_path = "uploads/doc_templates/test-clearance.docx"
+    doc_type.template_filename = "test-clearance.docx"
+    doc_type.template_active = True
+
+    official = Official(
+        full_name="Juan Dela Cruz",
+        title="Barangay Captain",
+        signature_path="uploads/official_signatures/captain-signature.jpg",
+        is_active=True,
+    )
+    db.session.add(official)
+    db.session.commit()
 
     _login(client, "clerk", "Clerk123!")
 
@@ -58,7 +99,6 @@ def test_document_workflow(client, app, make_user, make_resident, make_document_
     assert doc.file_path
 
     rel = doc.file_path
-    if rel.startswith("uploads/"):
-        rel = rel[len("uploads/") :]
-    abs_path = os.path.join(app.config["UPLOAD_FOLDER"], rel)
+    abs_path = resolve_stored_path_to_abs(rel)
+    assert abs_path is not None
     assert os.path.exists(abs_path)

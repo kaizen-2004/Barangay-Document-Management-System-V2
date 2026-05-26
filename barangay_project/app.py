@@ -8,7 +8,6 @@ starts the development server.
 import json
 import logging
 import os
-import shutil
 import subprocess
 import threading
 import time
@@ -22,12 +21,12 @@ from flask import Flask, flash, g, jsonify, redirect, request, session, url_for
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFError
 from flask_login import current_user, logout_user
-from flask_mail import Message
 from werkzeug.exceptions import HTTPException
 
 from .config import DevelopmentConfig
-from .extensions import csrf, db, login_manager, mail
+from .extensions import csrf, db, login_manager
 from sqlalchemy import inspect, text
+from sqlalchemy.engine import make_url
 
 # Optional: load environment variables from a .env file if present.
 # This makes local setup much smoother and avoids "role USER does not exist"
@@ -55,7 +54,16 @@ def create_app(config_class=DevelopmentConfig):
         load_dotenv(os.path.join(os.getcwd(), ".env"), override=False)
         load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
-    app = Flask(__name__)
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
+    templates_dir = os.path.join(frontend_dir, "templates")
+    static_dir = os.path.join(frontend_dir, "static")
+
+    app = Flask(
+        __name__,
+        template_folder=templates_dir,
+        static_folder=static_dir,
+        static_url_path="/static",
+    )
     app.config.from_object(config_class)
 
     # Logging configuration
@@ -66,9 +74,6 @@ def create_app(config_class=DevelopmentConfig):
     # Initialize extensions
     db.init_app(app)
     Migrate(app, db)
-    # Initialize mail extension for sending password reset emails
-    mail.init_app(app)
-
     # Enable CSRF protection globally. This allows templates to use
     # `csrf_token()` and enforces CSRF validation on POST/PUT/PATCH/DELETE.
     csrf.init_app(app)
@@ -136,27 +141,6 @@ def create_app(config_class=DevelopmentConfig):
             else:
                 app.logger.exception("Unhandled exception: %s", exc)
 
-            report_to = str(app.config.get("ERROR_REPORT_EMAIL", "")).strip()
-            if report_to:
-                try:
-                    user_id = getattr(current_user, "id", None) if current_user.is_authenticated else None
-                    subject = f"[Barangay] Error {request.method} {request.path}"
-                    body = (
-                        "An unhandled exception occurred.\n\n"
-                        f"Time (UTC): {datetime.now(timezone.utc).isoformat()}\n"
-                        f"Request ID: {getattr(g, 'request_id', None)}\n"
-                        f"User ID: {user_id}\n"
-                        f"Method: {request.method}\n"
-                        f"Path: {request.path}\n"
-                        f"IP: {request.remote_addr}\n"
-                        f"User-Agent: {request.user_agent.string if request.user_agent else ''}\n"
-                        f"Error: {exc}\n"
-                    )
-                    msg = Message(subject=subject, recipients=[report_to], body=body)
-                    mail.send(msg)
-                except Exception:
-                    app.logger.exception("Failed to send error report email.")
-
     @app.after_request
     def log_request(response):
         duration_ms = None
@@ -202,9 +186,6 @@ def create_app(config_class=DevelopmentConfig):
             last = session.get("last_activity")
             if last and now_ts - int(last) > idle_timeout:
                 logout_user()
-                session.pop("mfa_user_id", None)
-                session.pop("mfa_remember", None)
-                session.pop("mfa_next", None)
                 session.pop("force_password_change", None)
                 session.pop("last_activity", None)
                 flash("Your session expired due to inactivity. Please log in again.", "warning")
@@ -359,6 +340,7 @@ def create_app(config_class=DevelopmentConfig):
                         name VARCHAR(100) NOT NULL UNIQUE,
                         description VARCHAR(255),
                         template_path VARCHAR(255),
+                        field_config TEXT,
                         requires_photo BOOLEAN NOT NULL DEFAULT FALSE
                     );
                     """
@@ -370,8 +352,40 @@ def create_app(config_class=DevelopmentConfig):
                     _exec_try("ALTER TABLE document_types ADD COLUMN IF NOT EXISTS description VARCHAR(255);")
                 if "template_path" not in dt_cols:
                     _exec_try("ALTER TABLE document_types ADD COLUMN IF NOT EXISTS template_path VARCHAR(255);")
+                if "template_filename" not in dt_cols:
+                    _exec_try("ALTER TABLE document_types ADD COLUMN template_filename VARCHAR(255);")
+                if "template_version" not in dt_cols:
+                    _exec_try("ALTER TABLE document_types ADD COLUMN template_version INTEGER NOT NULL DEFAULT 1;")
+                if "template_active" not in dt_cols:
+                    _exec_try("ALTER TABLE document_types ADD COLUMN template_active BOOLEAN NOT NULL DEFAULT FALSE;")
+                if "template_uploaded_at" not in dt_cols:
+                    _exec_try("ALTER TABLE document_types ADD COLUMN template_uploaded_at DATETIME;")
+                if "template_uploaded_by_id" not in dt_cols:
+                    _exec_try("ALTER TABLE document_types ADD COLUMN template_uploaded_by_id INTEGER;")
+                if "placeholder_config" not in dt_cols:
+                    _exec_try("ALTER TABLE document_types ADD COLUMN placeholder_config TEXT;")
+                if "field_config" not in dt_cols:
+                    _exec_try("ALTER TABLE document_types ADD COLUMN field_config TEXT;")
+                if "validity_text" not in dt_cols:
+                    _exec_try("ALTER TABLE document_types ADD COLUMN validity_text VARCHAR(120);")
                 if "requires_photo" not in dt_cols:
                     _exec_try("ALTER TABLE document_types ADD COLUMN IF NOT EXISTS requires_photo BOOLEAN NOT NULL DEFAULT FALSE;")
+                insp = inspect(db.engine)
+
+            if not insp.has_table("officials"):
+                _exec_try(
+                    """
+                    CREATE TABLE IF NOT EXISTS officials (
+                        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                        full_name VARCHAR(150) NOT NULL,
+                        title VARCHAR(100) NOT NULL DEFAULT 'Barangay Captain',
+                        signature_path VARCHAR(255),
+                        is_active BOOLEAN NOT NULL DEFAULT FALSE,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME
+                    );
+                    """
+                )
                 insp = inspect(db.engine)
 
             # --- users: ensure the table exists (required for login) ---
@@ -517,6 +531,16 @@ def create_app(config_class=DevelopmentConfig):
                     _exec_try("ALTER TABLE documents ADD COLUMN IF NOT EXISTS issued_by_id INTEGER;")
                 if "archived_by_id" not in dcols:
                     _exec_try("ALTER TABLE documents ADD COLUMN IF NOT EXISTS archived_by_id INTEGER;")
+                if "generated_docx_path" not in dcols:
+                    _exec_try("ALTER TABLE documents ADD COLUMN generated_docx_path VARCHAR(255);")
+                if "generation_status" not in dcols:
+                    _exec_try("ALTER TABLE documents ADD COLUMN generation_status VARCHAR(50) NOT NULL DEFAULT 'pending';")
+                if "generation_error" not in dcols:
+                    _exec_try("ALTER TABLE documents ADD COLUMN generation_error TEXT;")
+                if "field_values" not in dcols:
+                    _exec_try("ALTER TABLE documents ADD COLUMN field_values TEXT;")
+                if "generated_at" not in dcols:
+                    _exec_try("ALTER TABLE documents ADD COLUMN generated_at DATETIME;")
                 _exec_try("UPDATE documents SET created_at = issue_date WHERE created_at IS NULL;")
                 _exec_try("UPDATE documents SET issued_at = issue_date WHERE issued_at IS NULL AND status='issued';")
                 insp = inspect(db.engine)
@@ -582,21 +606,42 @@ def create_app(config_class=DevelopmentConfig):
                 _exec_try("CREATE INDEX IF NOT EXISTS ix_documents_resident_id ON documents (resident_id);")
                 _exec_try("CREATE INDEX IF NOT EXISTS ix_documents_document_type_id ON documents (document_type_id);")
 
+        # MySQL/local additive schema fixes. `create_all()` does not add columns
+        # to existing tables, so keep this generic path before model-based seeding.
+        if db.engine.dialect.name != "postgresql":
+            def _exec_try_any(sql: str) -> None:
+                try:
+                    db.session.execute(text(sql))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
+            insp = inspect(db.engine)
+            if insp.has_table("document_types"):
+                dt_cols = _colnames("document_types")
+                if "field_config" not in dt_cols:
+                    _exec_try_any("ALTER TABLE document_types ADD COLUMN field_config TEXT;")
+                insp = inspect(db.engine)
+            if insp.has_table("documents"):
+                dcols = _colnames("documents")
+                if "field_values" not in dcols:
+                    _exec_try_any("ALTER TABLE documents ADD COLUMN field_values TEXT;")
+                insp = inspect(db.engine)
 
         # Seed common document types (safe to run repeatedly)
         DEFAULT_DOCUMENT_TYPES = [
-            ("Barangay ID", "Identification card issued by the barangay.", True, "barangay_id"),
-            ("Barangay Clearance", "General clearance certificate.", False, "barangay_clearance"),
-            ("Business Clearance", "Clearance for business permit/renewal.", False, "business_clearance"),
-            ("Certificate of Residency", "Certificate of residency.", False, "residency"),
-            ("Certificate of Indigency", "Certificate of indigency.", False, "indigency"),
-            ("Certificate of Good Moral", "Certificate of good moral character.", False, "good_moral"),
-            ("Other Certificate", "Other barangay-issued certificate.", False, "other"),
+            ("Barangay ID", "Identification card issued by the barangay.", True),
+            ("Barangay Clearance", "General clearance certificate.", False),
+            ("Business Clearance", "Clearance for business permit/renewal.", False),
+            ("Certificate of Residency", "Certificate of residency.", False),
+            ("Certificate of Indigency", "Certificate of indigency.", False),
+            ("Certificate of Good Moral", "Certificate of good moral character.", False),
+            ("Other Certificate", "Other barangay-issued certificate.", False),
         ]
 
         if insp.has_table("document_types"):
             DocumentType = models.DocumentType
-            for name, desc, req_photo, template_path in DEFAULT_DOCUMENT_TYPES:
+            for name, desc, req_photo in DEFAULT_DOCUMENT_TYPES:
                 existing = DocumentType.query.filter_by(name=name).first()
                 if not existing:
                     db.session.add(
@@ -604,7 +649,6 @@ def create_app(config_class=DevelopmentConfig):
                             name=name,
                             description=desc,
                             requires_photo=req_photo,
-                            template_path=template_path,
                         )
                     )
                 else:
@@ -612,19 +656,11 @@ def create_app(config_class=DevelopmentConfig):
                     if not existing.description:
                         existing.description = desc
                     existing.requires_photo = req_photo
-                    existing.template_path = template_path
 
             db.session.commit()
-        # Seed a default admin user if no users exist.  The default
-        # credentials are username `admin` with password `admin` and
-        # email `admin@example.com`.  Administrators can change the
-        # password after logging in.  Additional users can be created
-        # through the database or via the admin interface.  The email
-        # address is used for password reset notifications.
-        # Use a raw SQL query to count existing users.  Using the ORM here
-        # could fail during migrations if new columns (e.g., email) have
-        # not yet been added to the table.  Raw SQL avoids referencing
-        # model attributes that may not exist on the physical table.
+        # Seed a default admin user if no users exist.
+        # Use a raw SQL query to count existing users to keep this resilient
+        # against legacy schemas.
         if insp.has_table("users"):
             User = models.User
             try:
@@ -632,7 +668,7 @@ def create_app(config_class=DevelopmentConfig):
             except Exception:
                 user_count = None
             if user_count == 0:
-                admin = User(username="admin", email="admin@example.com", role="admin")
+                admin = User(username="admin", role="admin")
                 admin.set_password("admin")
                 db.session.add(admin)
                 db.session.commit()
@@ -649,25 +685,37 @@ def create_app(config_class=DevelopmentConfig):
 
     @app.cli.command("backup-db")
     def backup_db_command():
-        """Create a timestamped database backup (PostgreSQL or SQLite)."""
+        """Create a timestamped MySQL/MariaDB SQL backup."""
         backup_dir = app.config.get("BACKUP_DIR", os.path.join(os.getcwd(), "backups"))
         os.makedirs(backup_dir, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         url = app.config.get("SQLALCHEMY_DATABASE_URI") or ""
+        parsed = make_url(url)
+        if not parsed.drivername.startswith("mysql"):
+            print("Only MySQL/MariaDB is supported in this deployment mode.")
+            return
+        if not parsed.database:
+            print("DATABASE_URL must include a database name.")
+            return
 
-        if url.startswith("sqlite:///"):
-            db_path = url.replace("sqlite:///", "", 1)
-            if db_path == ":memory:":
-                print("Cannot back up an in-memory SQLite database.")
-                return
-            dest = os.path.join(backup_dir, f"backup_{ts}.sqlite")
-            shutil.copy2(db_path, dest)
-            print(f"SQLite backup created: {dest}")
-        else:
-            dest = os.path.join(backup_dir, f"backup_{ts}.dump")
-            cmd = ["pg_dump", "-Fc", url, "-f", dest]
-            subprocess.run(cmd, check=True)
-            print(f"PostgreSQL backup created: {dest}")
+        env = os.environ.copy()
+        if parsed.password:
+            env["MYSQL_PWD"] = parsed.password
+
+        dest = os.path.join(backup_dir, f"backup_{ts}.sql")
+        mysqldump_bin = app.config.get("MYSQLDUMP_BIN", "mysqldump")
+        cmd = [
+            mysqldump_bin,
+            f"--host={parsed.host or '127.0.0.1'}",
+            f"--port={parsed.port or 3306}",
+            f"--user={parsed.username or 'root'}",
+            parsed.database,
+            f"--result-file={dest}",
+            "--single-transaction",
+            "--quick",
+        ]
+        subprocess.run(cmd, check=True, env=env)
+        print(f"MySQL backup created: {dest}")
 
         # Retention cleanup
         retention_days = int(app.config.get("BACKUP_RETENTION_DAYS", 7))
@@ -688,17 +736,28 @@ def create_app(config_class=DevelopmentConfig):
             return
 
         url = app.config.get("SQLALCHEMY_DATABASE_URI") or ""
-        if url.startswith("sqlite:///"):
-            db_path = url.replace("sqlite:///", "", 1)
-            if db_path == ":memory:":
-                print("Cannot restore an in-memory SQLite database.")
-                return
-            shutil.copy2(backup_path, db_path)
-            print(f"SQLite restored from: {backup_path}")
-        else:
-            cmd = ["pg_restore", "--clean", "--if-exists", "-d", url, backup_path]
-            subprocess.run(cmd, check=True)
-            print(f"PostgreSQL restored from: {backup_path}")
+        parsed = make_url(url)
+        if not parsed.drivername.startswith("mysql"):
+            print("Only MySQL/MariaDB is supported in this deployment mode.")
+            return
+        if not parsed.database:
+            print("DATABASE_URL must include a database name.")
+            return
+
+        env = os.environ.copy()
+        if parsed.password:
+            env["MYSQL_PWD"] = parsed.password
+        mysql_bin = app.config.get("MYSQL_BIN", "mysql")
+        cmd = [
+            mysql_bin,
+            f"--host={parsed.host or '127.0.0.1'}",
+            f"--port={parsed.port or 3306}",
+            f"--user={parsed.username or 'root'}",
+            parsed.database,
+        ]
+        with open(backup_path, "rb") as infile:
+            subprocess.run(cmd, check=True, stdin=infile, env=env)
+        print(f"MySQL restored from: {backup_path}")
 
     def _add_months(value: dt_date, months: int) -> dt_date:
         month = value.month - 1 + months
@@ -759,7 +818,7 @@ def create_app(config_class=DevelopmentConfig):
                 doc.updated_at = now
 
         if to_delete:
-            static_root = os.path.join(app.root_path, "static")
+            static_root = app.static_folder
             for doc in to_delete:
                 if doc.file_path:
                     abs_path = os.path.join(static_root, doc.file_path)

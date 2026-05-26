@@ -5,7 +5,7 @@ from pathlib import Path
 
 SPEC_DIR = Path(globals().get("SPECPATH", Path.cwd()))
 ROOT = SPEC_DIR.parent
-PKG_DIR = ROOT / "barangay_project"
+FRONTEND_DIR = ROOT / "frontend-spa" / "dist"
 
 
 def _collect_files(base: Path, target_prefix: str):
@@ -21,8 +21,7 @@ def _collect_files(base: Path, target_prefix: str):
 
 
 datas = []
-datas.extend(_collect_files(PKG_DIR / "templates", "barangay_project/templates"))
-datas.extend(_collect_files(PKG_DIR / "static", "barangay_project/static"))
+datas.extend(_collect_files(FRONTEND_DIR, "frontend-spa/dist"))
 
 
 a = Analysis(

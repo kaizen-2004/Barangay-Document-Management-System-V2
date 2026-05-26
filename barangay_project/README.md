@@ -1,4 +1,4 @@
-# Barangay Document Management System (Flask + PostgreSQL)
+# Barangay Document Management System (Flask + MySQL)
 
 Manage barangay residents and issue official documents (Barangay ID/Clearance, Residency, Indigency, etc.).
 
@@ -11,7 +11,7 @@ Includes:
 ## Prerequisites
 
 * Python 3.10+ (works on 3.13 as well)
-* PostgreSQL server (for production; SQLite can be used temporarily for testing)
+* MySQL/MariaDB server (XAMPP-compatible)
 * Pipenv or virtualenv (optional but recommended for dependency management)
 
 ## Getting Started
@@ -24,29 +24,30 @@ Includes:
    ```
 3. **Install dependencies**:
    ```bash
-   pip install -r requirements.txt
+   pip install uv
+   uv sync
    ```
 4. **Configure your database** (recommended):
    ```bash
-   export DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/barangay_db"
+   export DATABASE_URL="mysql+pymysql://barangay_user:barangay_password@127.0.0.1:3306/barangay_db?charset=utf8mb4"
    ```
 
 5. **Create/upgrade tables**
 
    **Option A (recommended): Alembic migrations**
    ```bash
-   flask --app barangay_project.app:create_app db upgrade
+   uv run flask --app barangay_project.app:create_app db upgrade
    ```
 
    **Option B (quick local run): auto-create tables**
    ```bash
    export AUTO_CREATE_DB=true
-   flask --app barangay_project.app:create_app run
+   uv run flask --app barangay_project.app:create_app run
    ```
 
 6. **Run the application**:
    ```bash
-   flask --app barangay_project.app:create_app run
+   uv run flask --app barangay_project.app:create_app run
    ```
    Open your browser at `http://localhost:5000` to see the dashboard.
 
@@ -62,16 +63,14 @@ Change this password after your first login.
 ## Ops & reliability
 
 - Health check: `GET /healthz` (JSON + DB connectivity)
-- Automated backups: `flask --app wsgi backup-db` (uses `BACKUP_DIR` + `BACKUP_RETENTION_DAYS`)
+- Automated backups: `uv run flask --app wsgi backup-db` (uses `BACKUP_DIR` + `BACKUP_RETENTION_DAYS`)
 - Structured logging: set `LOG_JSON=True` (default) and `LOG_LEVEL=INFO`
-- Error reporting: set `ERROR_REPORT_EMAIL` plus your mail settings to receive unhandled exception reports
 - Auto-migrate on deploy: set `AUTO_MIGRATE=True` to run Alembic upgrades on startup
 
 ## Testing
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
+uv run python -m pytest
 ```
 
 ## File Structure

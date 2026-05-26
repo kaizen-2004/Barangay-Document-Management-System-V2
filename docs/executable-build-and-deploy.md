@@ -33,7 +33,8 @@ Executable output:
 
 1. Copy `barangay_server.exe` to your server folder (example `C:\barangay_system\app`)
 2. Copy `.env.example` to `.env` and set production values
-3. Run:
+3. Ensure XAMPP MySQL is installed and running, then run `SETUP_DATABASE.bat` from the bundle.
+4. Run:
 
 ```powershell
 set APP_ENV=production

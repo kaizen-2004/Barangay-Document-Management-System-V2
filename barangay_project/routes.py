@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import csv
 import io
+import json
 import re
 from datetime import date as dt_date, datetime
 
@@ -23,7 +24,7 @@ from sqlalchemy import func, or_
 
 from .forms import DocumentForm, ResidentForm
 from .helpers import log_action, roles_required, save_captured_image
-from .pdf_utils import generate_document_pdf
+from .docx_pipeline import render_document_files, DocumentGenerationError, resolve_stored_path_to_abs
 from .extensions import db
 from .models import Document, DocumentType, Resident, TransactionLog, User
 from .time_utils import utcnow
@@ -32,6 +33,56 @@ from .time_utils import utcnow
 DOCUMENT_STATUSES = ("draft", "pending", "approved", "issued")
 DRAFT_LIKE_STATUSES = ("draft", "pending", "approved")
 BRGY_ID_PATTERN = re.compile(r"^BRGY-\\d{4}-\\d{5}$", re.IGNORECASE)
+
+
+def _document_type_field_configs() -> dict[int, dict]:
+    configs: dict[int, dict] = {}
+    for dt in DocumentType.query.all():
+        try:
+            parsed = json.loads(dt.field_config or "{}")
+        except Exception:
+            parsed = {}
+        fields = parsed.get("fields") if isinstance(parsed, dict) else []
+        configs[dt.id] = {"fields": fields if isinstance(fields, list) else []}
+    return configs
+
+
+def _document_field_values(document: Document | None = None) -> dict[str, str]:
+    if not document or not document.field_values:
+        return {}
+    try:
+        parsed = json.loads(document.field_values)
+    except Exception:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {str(k): str(v or "") for k, v in parsed.items()}
+
+
+def _posted_document_field_values() -> dict[str, str]:
+    return {str(k): str(request.form.get(k) or "") for k in request.form}
+
+
+def _collect_document_field_values(doc_type: DocumentType) -> tuple[dict[str, str], list[str]]:
+    try:
+        config = json.loads(doc_type.field_config or "{}")
+    except Exception:
+        config = {}
+    fields = config.get("fields") if isinstance(config, dict) else []
+    values: dict[str, str] = {}
+    errors: list[str] = []
+    for field in fields if isinstance(fields, list) else []:
+        if not isinstance(field, dict):
+            continue
+        name = str(field.get("name", "")).strip()
+        if not name:
+            continue
+        label = str(field.get("label") or name.replace("_", " ").title())
+        value = (request.form.get(f"field_{name}") or "").strip()
+        if field.get("required") and not value:
+            errors.append(f"{label} is required.")
+        values[name] = value
+    return values, errors
 
 
 def _build_user_map(user_ids: set[int]) -> dict[int, str]:
@@ -59,9 +110,25 @@ main_bp = Blueprint("main", __name__)
 def index():
     """Dashboard with quick stats + charts."""
     resident_count = Resident.query.filter(Resident.is_archived.is_(False)).count()
+    archived_resident_count = Resident.query.filter(Resident.is_archived.is_(True)).count()
     document_count = Document.query.filter(
         Document.is_archived.is_(False),
         Document.status == "issued",
+    ).count()
+    draft_document_count = Document.query.filter(
+        Document.is_archived.is_(False),
+        Document.status.in_(DRAFT_LIKE_STATUSES),
+    ).count()
+    archived_document_count = Document.query.filter(Document.is_archived.is_(True)).count()
+
+    today = dt_date.today()
+    month_start = today.replace(day=1)
+    next_month_start = dt_date(today.year + (1 if today.month == 12 else 0), 1 if today.month == 12 else today.month + 1, 1)
+    documents_this_month = Document.query.filter(
+        Document.is_archived.is_(False),
+        Document.status == "issued",
+        Document.issue_date >= month_start,
+        Document.issue_date < next_month_start,
     ).count()
 
     # Residents by gender
@@ -88,11 +155,12 @@ def index():
     doc_type_values = [int(c) for _, c in type_rows]
 
     # Documents issued per month (last 6 months)
+    month_expr = func.date_format(Document.issue_date, "%Y-%m")
     month_rows = (
-        db.session.query(func.to_char(Document.issue_date, 'YYYY-MM'), func.count(Document.id))
+        db.session.query(month_expr, func.count(Document.id))
         .filter(Document.is_archived.is_(False), Document.status == "issued")
-        .group_by(func.to_char(Document.issue_date, 'YYYY-MM'))
-        .order_by(func.to_char(Document.issue_date, 'YYYY-MM'))
+        .group_by(month_expr)
+        .order_by(month_expr)
         .all()
     )
     month_labels = [m for m, _ in month_rows][-6:]
@@ -110,7 +178,11 @@ def index():
     return render_template(
         "index.html",
         resident_count=resident_count,
+        archived_resident_count=archived_resident_count,
         document_count=document_count,
+        draft_document_count=draft_document_count,
+        archived_document_count=archived_document_count,
+        documents_this_month=documents_this_month,
         gender_labels=gender_labels,
         gender_values=gender_values,
         doc_type_labels=doc_type_labels,
@@ -1028,30 +1100,12 @@ def download_document_pdf(document_id: int):
         flash("Only issued documents can be downloaded.", "warning")
         return redirect(url_for("main.list_documents"))
     if not doc.file_path:
-        # Try generating on-demand if missing
-        pdf_rel_path = generate_document_pdf(doc)
-        if pdf_rel_path:
-            doc.file_path = pdf_rel_path
-            db.session.commit()
-        else:
-            flash("PDF could not be generated for this document.", "danger")
-            return redirect(url_for("main.list_documents"))
+        flash("No generated PDF found for this issued document.", "danger")
+        return redirect(url_for("main.list_documents"))
 
-    # doc.file_path is stored relative to the /static directory
-    pdf_abs_path = os.path.join(current_app.root_path, "static", doc.file_path)
-    if not os.path.exists(pdf_abs_path):
-        # Auto-regenerate on demand (e.g., after moving ...
-        try:
-            doc.file_path = generate_document_pdf(doc)
-            db.session.commit()
-            pdf_abs_path = os.path.join(current_app.root_path, "static", doc.file_path)
-        except Exception:
-            db.session.rollback()
-            flash("PDF file is missing on disk and could not be regenerated.", "danger")
-            return redirect(url_for("main.list_documents"))
-
-    if not os.path.exists(pdf_abs_path):
-        flash("PDF file is missing on disk. Please re-issue or regenerate.", "danger")
+    pdf_abs_path = resolve_stored_path_to_abs(doc.file_path)
+    if not pdf_abs_path or not os.path.exists(pdf_abs_path):
+        flash("PDF file is missing on disk. Please run document regeneration.", "danger")
         return redirect(url_for("main.list_documents"))
 
     log_action(
@@ -1064,7 +1118,7 @@ def download_document_pdf(document_id: int):
         },
     )
 
-    return send_file(pdf_abs_path, mimetype="application/pdf", as_attachment=True)
+    return send_file(str(pdf_abs_path), mimetype="application/pdf", as_attachment=True)
 
 
 @main_bp.route("/documents/issue", methods=["GET", "POST"])
@@ -1072,6 +1126,7 @@ def download_document_pdf(document_id: int):
 @roles_required("admin", "clerk")
 def issue_document():
     form = DocumentForm()
+    field_configs = _document_type_field_configs()
     form.resident_id.choices = [
         (r.id, f"{r.last_name}, {r.first_name}")
         for r in Resident.query.filter(Resident.is_archived.is_(False)).order_by(Resident.last_name.asc())
@@ -1093,14 +1148,20 @@ def issue_document():
         doc_type = db.get_or_404(DocumentType, form.document_type_id.data)
         if resident.is_archived:
             flash("Cannot create documents for archived residents.", "warning")
-            return render_template("document_form.html", form=form, title="Create Draft")
+            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values())
 
         if form.issue_date.data and form.issue_date.data > dt_date.today():
             form.issue_date.errors.append("Issue date cannot be in the future.")
-            return render_template("document_form.html", form=form, title="Create Draft")
+            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values())
         if form.issue_date.data and resident.birth_date and form.issue_date.data < resident.birth_date:
             form.issue_date.errors.append("Issue date cannot be before the resident's birth date.")
-            return render_template("document_form.html", form=form, title="Create Draft")
+            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values())
+
+        field_values, field_errors = _collect_document_field_values(doc_type)
+        if field_errors:
+            for error in field_errors:
+                flash(error, "danger")
+            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values())
 
         # If the user captured a new photo during issuance, store it on the resident record
         if form.resident_photo_data.data:
@@ -1111,6 +1172,7 @@ def issue_document():
             resident_id=resident.id,
             document_type_id=doc_type.id,
             details=form.details.data,
+            field_values=json.dumps(field_values) if field_values else None,
             issue_date=issued,
             status="draft",
             created_by_id=current_user.id,
@@ -1131,7 +1193,7 @@ def issue_document():
     if not form.issue_date.data:
         form.issue_date.data = dt_date.today()
 
-    return render_template("document_form.html", form=form, title="Create Draft")
+    return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values={})
 
 
 @main_bp.route("/documents/<int:document_id>/edit", methods=["GET", "POST"])
@@ -1139,6 +1201,7 @@ def issue_document():
 @roles_required("admin", "clerk")
 def edit_document(document_id: int):
     document = db.get_or_404(Document, document_id)
+    field_configs = _document_type_field_configs()
     if document.is_archived:
         flash("Archived documents cannot be edited.", "warning")
         return redirect(url_for("main.list_documents"))
@@ -1169,18 +1232,26 @@ def edit_document(document_id: int):
         resident = db.get_or_404(Resident, form.resident_id.data)
         if resident.is_archived:
             flash("Cannot assign archived residents to documents.", "warning")
-            return render_template("document_form.html", form=form, title="Edit Document")
+            return render_template("document_form.html", form=form, title="Edit Document", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values())
 
         if form.issue_date.data and form.issue_date.data > dt_date.today():
             form.issue_date.errors.append("Issue date cannot be in the future.")
-            return render_template("document_form.html", form=form, title="Edit Document")
+            return render_template("document_form.html", form=form, title="Edit Document", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values())
         if form.issue_date.data and resident.birth_date and form.issue_date.data < resident.birth_date:
             form.issue_date.errors.append("Issue date cannot be before the resident's birth date.")
-            return render_template("document_form.html", form=form, title="Edit Document")
+            return render_template("document_form.html", form=form, title="Edit Document", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values())
+
+        doc_type = db.get_or_404(DocumentType, form.document_type_id.data)
+        field_values, field_errors = _collect_document_field_values(doc_type)
+        if field_errors:
+            for error in field_errors:
+                flash(error, "danger")
+            return render_template("document_form.html", form=form, title="Edit Document", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values())
 
         document.resident_id = form.resident_id.data
         document.document_type_id = form.document_type_id.data
         document.details = form.details.data
+        document.field_values = json.dumps(field_values) if field_values else None
         document.issue_date = form.issue_date.data or document.issue_date
         document.updated_at = utcnow()
         document.updated_by_id = current_user.id
@@ -1201,7 +1272,7 @@ def edit_document(document_id: int):
         flash("Document updated successfully!", "success")
         return redirect(url_for("main.list_documents"))
 
-    return render_template("document_form.html", form=form, title="Edit Document")
+    return render_template("document_form.html", form=form, title="Edit Document", document_type_field_configs=field_configs, custom_field_values=_document_field_values(document))
 
 
 @main_bp.route("/documents/<int:document_id>/issue", methods=["POST"])
@@ -1237,6 +1308,18 @@ def finalize_document_issue(document_id: int):
         flash("Issue date cannot be before the resident's birth date.", "warning")
         return redirect(url_for("main.list_documents"))
 
+    if not document.issue_date:
+        document.issue_date = utcnow()
+
+    try:
+        docx_rel_path, pdf_rel_path = render_document_files(document)
+    except DocumentGenerationError as exc:
+        document.generation_status = "failed"
+        document.generation_error = str(exc)
+        db.session.commit()
+        flash(f"Document issuance blocked: {exc}", "danger")
+        return redirect(url_for("main.list_documents"))
+
     if document.status in {"pending", "approved"}:
         document.approved_at = None
         document.approved_by_id = None
@@ -1246,15 +1329,12 @@ def finalize_document_issue(document_id: int):
     document.updated_at = utcnow()
     document.updated_by_id = current_user.id
 
-    if not document.issue_date:
-        document.issue_date = utcnow()
-
+    document.generated_docx_path = docx_rel_path
+    document.file_path = pdf_rel_path
+    document.generation_status = "ready"
+    document.generation_error = None
+    document.generated_at = utcnow()
     db.session.commit()
-
-    pdf_rel_path = generate_document_pdf(document)
-    if pdf_rel_path:
-        document.file_path = pdf_rel_path
-        db.session.commit()
 
     log_action(
         f"Issued document #{document.id}",

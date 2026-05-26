@@ -16,7 +16,6 @@ from functools import wraps
 
 from flask import abort, current_app, has_request_context, request
 from flask_login import current_user
-from flask_mail import Message
 from werkzeug.utils import secure_filename
 
 from .extensions import db
@@ -103,48 +102,6 @@ def log_action(
         db.session.commit()
 
 
-def _send_otp_email(user, code: str, subject: str, body: str) -> None:
-    """Send a one-time code email with a custom subject/body."""
-    # Retrieve the mail extension from the current app context
-    mail = current_app.extensions.get("mail")
-    if mail is None:
-        # If mail is not configured, simply log the OTP to the console for debugging
-        print(f"OTP for {user.email}: {code}")
-        return
-
-    # Compose the email message
-    recipients = [user.email]
-    msg = Message(subject=subject, recipients=recipients, body=body)
-    try:
-        mail.send(msg)
-    except Exception as exc:
-        # If sending fails, log the code to the console for debugging
-        print(f"Failed to send OTP email: {exc}")
-        print(f"OTP for {user.email}: {code}")
-
-
-def send_otp_email(user, code: str) -> None:
-    """Send a password reset OTP to the given user's email address."""
-    subject = "Your Password Reset Code"
-    body = (
-        f"Hello {user.username},\n\n"
-        f"We received a request to reset your password.\n"
-        f"Use the following one-time code to reset your password: {code}\n\n"
-        f"If you did not request a password reset, please ignore this email."
-    )
-    _send_otp_email(user, code, subject, body)
-
-
-def send_login_otp_email(user, code: str) -> None:
-    """Send a login verification OTP to the given user's email address."""
-    subject = "Your Login Verification Code"
-    body = (
-        f"Hello {user.username},\n\n"
-        f"Use the following one-time code to finish signing in: {code}\n\n"
-        f"If you did not try to sign in, please change your password immediately."
-    )
-    _send_otp_email(user, code, subject, body)
-
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 
 
@@ -165,7 +122,7 @@ def save_uploaded_image(file_storage, subfolder: str) -> str | None:
         return None
 
     upload_root = current_app.config.get(
-        "UPLOAD_FOLDER", os.path.join(current_app.root_path, "static", "uploads")
+        "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
     )
     target_dir = os.path.join(upload_root, subfolder)
     os.makedirs(target_dir, exist_ok=True)
@@ -204,7 +161,7 @@ def save_captured_image(data_url: str | None, subfolder: str) -> str | None:
         return None
 
     upload_root = current_app.config.get(
-        "UPLOAD_FOLDER", os.path.join(current_app.root_path, "static", "uploads")
+        "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
     )
     target_dir = os.path.join(upload_root, subfolder)
     os.makedirs(target_dir, exist_ok=True)

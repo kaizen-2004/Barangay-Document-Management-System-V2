@@ -1,73 +1,43 @@
-# Barangay Project – Setup & New Features
+# Barangay Project - Flask Setup
 
 ## 1) Setup
 
 ```bash
-# install uv once (if not yet installed)
 pip install uv
-
-# inside the project folder
-uv sync
-
+uv sync --group dev
 cp .env.example .env
-# edit .env with your real DATABASE_URL and SECRET_KEY
 ```
 
-### PostgreSQL quick check
+Edit `.env` with at least:
+
+```env
+SECRET_KEY=replace-with-long-random-string
+DATABASE_URL=mysql+pymysql://barangay_user:barangay_password@127.0.0.1:3306/barangay_db?charset=utf8mb4
+HOST=0.0.0.0
+PORT=5000
+LIBREOFFICE_BIN=soffice
+DOCUMENT_STORAGE_ROOT=C:\\barangay_system\\data
+```
+
+## 2) Database
+
+Use Flask migration/initialization commands:
+
 ```bash
-psql "$DATABASE_URL" -c "\conninfo" 
+uv run flask --app barangay_project.app:create_app db upgrade
 ```
-
-## 2) Initialize DB
-
-```bash
-uv run flask --app wsgi init-db
-```
-
-This will:
-- create missing tables
-- run "schema-heal" that adds missing columns safely (users, documents.doc_type, transaction_logs extras, etc.)
 
 ## 3) Run
 
 ```bash
-uv run flask --app wsgi run
+uv run python run_server.py
 ```
 
-Open: http://127.0.0.1:5000
+Open `http://127.0.0.1:5000`.
 
-## 4) What’s new
+## 4) Windows Notes
 
-- Dashboard charts (always visible)
-- Reports page with export: CSV / XLSX / PDF
-- Audit logging:
-  - logins/logouts
-  - admin user create/edit/delete
-  - PDF downloads
-  - report exports
-
-## 5) Ops & reliability
-
-- Health check: `GET /healthz` (returns JSON + DB connectivity)
-- Automated backups: `uv run flask --app wsgi backup-db` (uses `BACKUP_DIR`, retention via `BACKUP_RETENTION_DAYS`)
-- Restore from backup: `uv run flask --app wsgi restore-db --path /path/to/backup.dump --yes`
-- Purge expired documents (issue date + validity):  
-  `uv run flask --app wsgi purge-expired-documents --dry-run`  
-  `uv run flask --app wsgi purge-expired-documents --yes`
-- Structured logging: set `LOG_JSON=True` (default) and `LOG_LEVEL=INFO`
-- Error reporting: set `ERROR_REPORT_EMAIL` plus your mail settings to receive unhandled exception reports
-- Auto-migrate on deploy: set `AUTO_MIGRATE=True` to run `flask db upgrade` on startup
-
-## 6) Testing
-
-```bash
-uv run python -m pytest
-```
-
-## 7) Windows production process manager
-
-For on-prem Windows deployment, run the app with Waitress and register it as a Windows service:
-
-```bash
-uv run waitress-serve --host=0.0.0.0 --port=5000 wsgi:app
-```
+- Install LibreOffice on the server PC.
+- Ensure `soffice` is in PATH or set `LIBREOFFICE_BIN` to full path.
+- DOCX templates are required for issued document generation.
+- Template files and generated documents are saved under `DOCUMENT_STORAGE_ROOT` (user-controlled path).

@@ -8,6 +8,7 @@ optional fields can be added to meet specific barangay requirements.
 """
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import text
 
 from .extensions import db
 from .time_utils import utcnow
@@ -42,7 +43,7 @@ class Resident(db.Model):
     updated_at = db.Column(db.DateTime, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    is_archived = db.Column(db.Boolean, default=False, nullable=False, server_default="false")
+    is_archived = db.Column(db.Boolean, default=False, nullable=False, server_default=text("0"))
     archived_at = db.Column(db.DateTime, nullable=True)
     archived_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
@@ -69,7 +70,15 @@ class DocumentType(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.String(255), nullable=True)
     template_path = db.Column(db.String(255), nullable=True)
-    requires_photo = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    template_filename = db.Column(db.String(255), nullable=True)
+    template_version = db.Column(db.Integer, nullable=False, default=1, server_default=text("1"))
+    template_active = db.Column(db.Boolean, nullable=False, default=False, server_default=text("0"))
+    template_uploaded_at = db.Column(db.DateTime, nullable=True)
+    template_uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    placeholder_config = db.Column(db.Text, nullable=True)
+    field_config = db.Column(db.Text, nullable=True)
+    validity_text = db.Column(db.String(120), nullable=True)
+    requires_photo = db.Column(db.Boolean, nullable=False, default=False, server_default=text("0"))
 
     documents = db.relationship(
         "Document",
@@ -99,13 +108,18 @@ class Document(db.Model):
     document_type_id = db.Column(db.Integer, db.ForeignKey("document_types.id"), nullable=False)
     status = db.Column(db.String(20), default="draft", nullable=False)
     details = db.Column(db.Text, nullable=True)
+    field_values = db.Column(db.Text, nullable=True)
     issue_date = db.Column(db.DateTime, default=utcnow, nullable=False)
     file_path = db.Column(db.String(255), nullable=True)
+    generated_docx_path = db.Column(db.String(255), nullable=True)
+    generation_status = db.Column(db.String(50), nullable=False, default="pending", server_default=text("'pending'"))
+    generation_error = db.Column(db.Text, nullable=True)
+    generated_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, nullable=True)
     approved_at = db.Column(db.DateTime, nullable=True)
     issued_at = db.Column(db.DateTime, nullable=True)
-    is_archived = db.Column(db.Boolean, default=False, nullable=False, server_default="false")
+    is_archived = db.Column(db.Boolean, default=False, nullable=False, server_default=text("0"))
     archived_at = db.Column(db.DateTime, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
@@ -130,12 +144,7 @@ class User(UserMixin, db.Model):
 
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
-    # Unique username used for login.  Separate from the user's email
-    # address, which is stored in the `email` column.
     username = db.Column(db.String(150), nullable=False, unique=True)
-    # Email address associated with the user.  Used for password reset
-    # notifications and other communications.
-    email = db.Column(db.String(255), nullable=False, unique=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False, default="clerk")
     created_at = db.Column(db.DateTime, default=utcnow)
@@ -188,30 +197,6 @@ class TransactionLog(db.Model):
         return f"<TransactionLog {self.id} - {self.action}>"
 
 
-class PasswordReset(db.Model):
-    """
-    Stores one-time password (OTP) codes for password reset operations.
-
-    Each record corresponds to a single password reset request.  The
-    OTP code is valid until `expires_at` and can be marked as used
-    once the password has been successfully reset.  Entries older
-    than the expiration time should be cleaned up periodically.
-    """
-
-    __tablename__ = "password_resets"
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    otp_code = db.Column(db.String(20), nullable=False)
-    expires_at = db.Column(db.DateTime, nullable=False)
-    used = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
-
-    user = db.relationship("User")
-
-    def __repr__(self):
-        return f"<PasswordReset {self.id} for user {self.user_id}>"
-
-
 class LoginAttempt(db.Model):
     """Tracks login attempts for rate limiting and audit."""
 
@@ -226,18 +211,17 @@ class LoginAttempt(db.Model):
         return f"<LoginAttempt {self.id} {'success' if self.success else 'fail'}>"
 
 
-class LoginMfaCode(db.Model):
-    """Stores short-lived OTP codes for admin MFA during login."""
+class Official(db.Model):
+    """Barangay officials used for document signing context."""
 
-    __tablename__ = "login_mfa_codes"
+    __tablename__ = "officials"
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    otp_code = db.Column(db.String(20), nullable=False)
-    expires_at = db.Column(db.DateTime, nullable=False)
-    used = db.Column(db.Boolean, default=False, nullable=False)
+    full_name = db.Column(db.String(150), nullable=False)
+    title = db.Column(db.String(100), nullable=False, default="Barangay Captain")
+    signature_path = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=False, server_default=text("0"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
-
-    user = db.relationship("User")
+    updated_at = db.Column(db.DateTime, nullable=True)
 
     def __repr__(self):
-        return f"<LoginMfaCode {self.id} for user {self.user_id}>"
+        return f"<Official {self.full_name} ({self.title})>"

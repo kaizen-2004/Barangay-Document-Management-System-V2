@@ -1,29 +1,29 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$BackupPath,
-    [string]$AppDir = "C:\barangay_system\app"
+    [string]$MysqlPath = "C:\xampp\mysql\bin\mysql.exe",
+    [string]$Host = "127.0.0.1",
+    [int]$Port = 3306,
+    [string]$Username = "barangay_user",
+    [string]$Password = "barangay_password",
+    [string]$Database = "barangay_db"
 )
 
 $ErrorActionPreference = "Stop"
 
-$uvCmd = (Get-Command uv -ErrorAction SilentlyContinue)
-if (-not $uvCmd) {
-    throw "uv is not installed or not in PATH. Install uv first."
-}
-
-if (-not (Test-Path $AppDir)) {
-    throw "App directory not found: $AppDir"
+if (-not (Test-Path $MysqlPath)) {
+    throw "mysql executable not found: $MysqlPath"
 }
 
 if (-not (Test-Path $BackupPath)) {
     throw "Backup file not found: $BackupPath"
 }
 
-Push-Location $AppDir
+$env:MYSQL_PWD = $Password
 try {
-    & $uvCmd.Source run flask --app wsgi restore-db --path $BackupPath --yes
+    Get-Content $BackupPath | & $MysqlPath --host=$Host --port=$Port --user=$Username $Database
 } finally {
-    Pop-Location
+    Remove-Item Env:\MYSQL_PWD -ErrorAction SilentlyContinue
 }
 
 Write-Host "Restore drill completed using: $BackupPath"

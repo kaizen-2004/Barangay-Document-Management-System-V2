@@ -10,8 +10,23 @@ permissions:
   contents: write
 
 jobs:
-  build-windows-exe:
-    runs-on: windows-latest
+  test-mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: barangay_test
+          MYSQL_USER: barangay_user
+          MYSQL_PASSWORD: barangay_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
       - name: Checkout
@@ -28,8 +43,29 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
-      - name: Run tests
+      - name: Run tests (MySQL)
+        env:
+          TEST_DATABASE_URL: mysql+pymysql://barangay_user:barangay_password@127.0.0.1:3306/barangay_test?charset=utf8mb4
         run: uv run python -m pytest
+
+  build-windows-exe:
+    needs: test-mysql
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --group dev
 
       - name: Build executable
         run: uv run pyinstaller packaging/barangay_server.spec --clean

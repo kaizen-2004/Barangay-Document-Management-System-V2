@@ -7,8 +7,8 @@ users and add new users to the system.  Access to these routes is
 restricted to authenticated users with the 'admin' role.
 """
 import os
-import shutil
 import subprocess
+import json
 from werkzeug.utils import secure_filename
 from datetime import datetime, timezone
 
@@ -16,12 +16,83 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 
 from sqlalchemy import or_, text
+from sqlalchemy.engine import make_url
 
 from .extensions import db
-from .helpers import log_action, roles_required
-from .models import PasswordReset, TransactionLog, User, LoginMfaCode, Document, DocumentType
-from .forms import EditUserForm, UserForm, DeleteForm, DocumentTypeForm
+from .helpers import log_action, roles_required, save_uploaded_image
+from .models import TransactionLog, User, Document, DocumentType, Official
+from .forms import EditUserForm, UserForm, DeleteForm, DocumentTypeForm, OfficialForm
+from .docx_pipeline import (
+    store_template_upload,
+    validate_template_with_required,
+    REQUIRED_PLACEHOLDERS,
+    remove_template_file,
+    resolve_stored_path_to_abs,
+    template_storage_dir,
+    document_output_dir,
+)
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+def _validate_field_config(raw: str) -> str | None:
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    parsed = json.loads(raw)
+    fields = parsed.get("fields") if isinstance(parsed, dict) else None
+    if not isinstance(fields, list):
+        raise ValueError("field config must be an object with a 'fields' list")
+    seen: set[str] = set()
+    for field in fields:
+        if not isinstance(field, dict):
+            raise ValueError("each field must be an object")
+        name = str(field.get("name", "")).strip()
+        label = str(field.get("label", "")).strip()
+        field_type = str(field.get("type", "text")).strip() or "text"
+        if not name or not name.replace("_", "").isalnum():
+            raise ValueError("field names may only contain letters, numbers, and underscores")
+        if name in seen:
+            raise ValueError(f"duplicate field name: {name}")
+        if field_type not in {"text", "textarea", "date", "number"}:
+            raise ValueError(f"unsupported field type for {name}: {field_type}")
+        if not label:
+            field["label"] = name.replace("_", " ").title()
+        field["name"] = name
+        field["type"] = field_type
+        field["required"] = bool(field.get("required"))
+        seen.add(name)
+    return json.dumps({"fields": fields}, indent=2)
+
+
+def _field_config_names(raw: str | None) -> set[str]:
+    if not raw:
+        return set()
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return set()
+    fields = parsed.get("fields") if isinstance(parsed, dict) else []
+    if not isinstance(fields, list):
+        return set()
+    return {str(field.get("name", "")).strip() for field in fields if isinstance(field, dict) and str(field.get("name", "")).strip()}
+
+
+def _mysql_cli_args_and_env(url: str) -> tuple[list[str], dict[str, str]]:
+    parsed = make_url(url)
+    if not parsed.drivername.startswith("mysql"):
+        raise RuntimeError("Only MySQL/MariaDB is supported in this deployment mode.")
+    if not parsed.database:
+        raise RuntimeError("DATABASE_URL must include a database name.")
+
+    args = [
+        f"--host={parsed.host or '127.0.0.1'}",
+        f"--port={parsed.port or 3306}",
+        f"--user={parsed.username or 'root'}",
+    ]
+    env = os.environ.copy()
+    if parsed.password:
+        env["MYSQL_PWD"] = parsed.password
+    return args, env
 
 
 def _backup_db(backup_dir: str) -> str:
@@ -29,17 +100,12 @@ def _backup_db(backup_dir: str) -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     url = current_app.config.get("SQLALCHEMY_DATABASE_URI") or ""
 
-    if url.startswith("sqlite:///"):
-        db_path = url.replace("sqlite:///", "", 1)
-        if db_path == ":memory:":
-            raise RuntimeError("Cannot back up an in-memory SQLite database.")
-        dest = os.path.join(backup_dir, f"backup_{ts}.sqlite")
-        shutil.copy2(db_path, dest)
-        return dest
-
-    dest = os.path.join(backup_dir, f"backup_{ts}.dump")
-    cmd = ["pg_dump", "-Fc", url, "-f", dest]
-    subprocess.run(cmd, check=True)
+    cli_args, env = _mysql_cli_args_and_env(url)
+    parsed = make_url(url)
+    dest = os.path.join(backup_dir, f"backup_{ts}.sql")
+    mysqldump_bin = current_app.config.get("MYSQLDUMP_BIN", "mysqldump")
+    cmd = [mysqldump_bin, *cli_args, parsed.database, f"--result-file={dest}", "--single-transaction", "--quick"]
+    subprocess.run(cmd, check=True, env=env)
     return dest
 
 
@@ -47,32 +113,19 @@ def _restore_db(backup_path: str) -> None:
     url = current_app.config.get("SQLALCHEMY_DATABASE_URI") or ""
     db.session.remove()
     db.engine.dispose()
-    if url.startswith("sqlite:///"):
-        db_path = url.replace("sqlite:///", "", 1)
-        if db_path == ":memory:":
-            raise RuntimeError("Cannot restore an in-memory SQLite database.")
-        if not backup_path.endswith((".sqlite", ".db")):
-            raise RuntimeError("Selected backup does not look like a SQLite file.")
-        shutil.copy2(backup_path, db_path)
-        return
 
-    if not backup_path.endswith((".dump", ".backup", ".tar")):
-        raise RuntimeError("Selected backup does not look like a PostgreSQL dump.")
+    if not backup_path.endswith(".sql"):
+        raise RuntimeError("Selected backup does not look like a MySQL SQL dump.")
 
-    cmd = [
-        "pg_restore",
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-privileges",
-        "-d",
-        url,
-        backup_path,
-    ]
+    cli_args, env = _mysql_cli_args_and_env(url)
+    parsed = make_url(url)
+    mysql_bin = current_app.config.get("MYSQL_BIN", "mysql")
+    cmd = [mysql_bin, *cli_args, parsed.database]
     try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        with open(backup_path, "rb") as infile:
+            subprocess.run(cmd, check=True, stdin=infile, capture_output=True, env=env)
     except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or exc.stdout or str(exc)).strip()
+        detail = ((exc.stderr or b"") + (exc.stdout or b"")).decode(errors="ignore").strip() or str(exc)
         raise RuntimeError(detail) from exc
 
 
@@ -117,17 +170,8 @@ def _format_bytes(value: int | None) -> str:
 
 
 def _get_db_size_bytes() -> int | None:
-    url = current_app.config.get("SQLALCHEMY_DATABASE_URI") or ""
-    if url.startswith("sqlite:///"):
-        db_path = url.replace("sqlite:///", "", 1)
-        if db_path == ":memory:":
-            return None
-        try:
-            return os.path.getsize(db_path)
-        except OSError:
-            return None
     try:
-        return db.session.execute(text("SELECT pg_database_size(current_database())")).scalar()
+        return db.session.execute(text("SELECT SUM(data_length + index_length) FROM information_schema.tables WHERE table_schema = DATABASE()")).scalar()
     except Exception:
         return None
 
@@ -163,7 +207,7 @@ def list_users():
     if q:
         like = f"%{q}%"
         query = query.filter(
-            or_(User.username.ilike(like), User.email.ilike(like), User.role.ilike(like))
+            or_(User.username.ilike(like), User.role.ilike(like))
         )
     query = query.order_by(User.username.asc())
     pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
@@ -182,7 +226,6 @@ def add_user():
         # Create a new user with the supplied details
         user = User(
             username=form.username.data,
-            email=form.email.data,
             role=form.role.data,
         )
         user.set_password(form.password.data)
@@ -220,7 +263,6 @@ def edit_user(user_id: int):
             return redirect(url_for("admin.edit_user", user_id=user.id))
 
         user.username = form.username.data
-        user.email = form.email.data
         user.role = form.role.data
         # Only set a new password if one was provided
         if form.password.data:
@@ -255,8 +297,6 @@ def delete_user(user_id: int):
 
     # Preserve audit logs by detaching user references before deletion.
     TransactionLog.query.filter_by(user_id=user.id).update({"user_id": None}, synchronize_session=False)
-    PasswordReset.query.filter_by(user_id=user.id).delete(synchronize_session=False)
-    LoginMfaCode.query.filter_by(user_id=user.id).delete(synchronize_session=False)
 
     db.session.delete(user)
     db.session.commit()
@@ -290,6 +330,8 @@ def list_document_types():
         document_types=document_types,
         delete_form=delete_form,
         pagination=pagination,
+        template_storage_dir=str(template_storage_dir()),
+        output_storage_dir=str(document_output_dir()),
     )
 
 
@@ -299,10 +341,63 @@ def list_document_types():
 def add_document_type():
     form = DocumentTypeForm()
     if form.validate_on_submit():
+        placeholder_config_raw = (form.placeholder_config.data or "").strip()
+        try:
+            field_config_raw = _validate_field_config(form.field_config.data or "")
+        except Exception as exc:
+            flash(f"Invalid fill-out fields JSON: {exc}", "danger")
+            return render_template("document_type_form.html", form=form, title="Add Document Type", submit_label="Create")
+        if placeholder_config_raw:
+            try:
+                parsed = json.loads(placeholder_config_raw)
+                if not isinstance(parsed, dict) or not isinstance(parsed.get("required", []), list):
+                    raise ValueError("placeholder config must be an object with a 'required' list")
+                required_placeholders = {str(x).strip() for x in parsed.get("required", []) if str(x).strip()}
+                if not required_placeholders:
+                    raise ValueError("'required' must contain at least one placeholder")
+            except Exception as exc:
+                flash(f"Invalid placeholder config JSON: {exc}", "danger")
+                return render_template("document_type_form.html", form=form, title="Add Document Type", submit_label="Create")
+        else:
+            required_placeholders = set(REQUIRED_PLACEHOLDERS)
+
+        template_path = None
+        template_filename = None
+        template_active = bool(form.template_active.data)
+        template_version = 1
+        upload = request.files.get("template_file")
+        if upload and upload.filename:
+            try:
+                template_path, template_filename = store_template_upload(upload, form.name.data.strip())
+                abs_template = resolve_stored_path_to_abs(template_path)
+                validation = validate_template_with_required(str(abs_template), required_placeholders, extra_allowed=_field_config_names(field_config_raw))
+                if validation["missing"]:
+                    flash(
+                        "Template is missing required placeholders: " + ", ".join(validation["missing"]),
+                        "danger",
+                    )
+                    return render_template("document_type_form.html", form=form, title="Add Document Type", submit_label="Create")
+                if validation["unknown"]:
+                    flash(
+                        "Template has unknown placeholders: " + ", ".join(validation["unknown"]),
+                        "warning",
+                    )
+            except Exception as exc:
+                flash(f"Template upload failed: {exc}", "danger")
+                return render_template("document_type_form.html", form=form, title="Add Document Type", submit_label="Create")
+
         dt = DocumentType(
             name=form.name.data.strip(),
             description=form.description.data.strip() if form.description.data else None,
-            template_path=form.template_path.data or None,
+            template_path=template_path,
+            template_filename=template_filename,
+            template_version=template_version,
+            template_active=template_active and bool(template_path),
+            template_uploaded_by_id=current_user.id if template_path else None,
+            template_uploaded_at=datetime.now(timezone.utc) if template_path else None,
+            placeholder_config=placeholder_config_raw or None,
+            field_config=field_config_raw,
+            validity_text=(form.validity_text.data or "").strip() or None,
             requires_photo=bool(form.requires_photo.data),
         )
         db.session.add(dt)
@@ -319,16 +414,71 @@ def add_document_type():
 def edit_document_type(type_id: int):
     dt = db.get_or_404(DocumentType, type_id)
     form = DocumentTypeForm(obj=dt)
+    if request.method == "GET":
+        form.placeholder_config.data = dt.placeholder_config or ""
+        form.field_config.data = dt.field_config or ""
     if form.validate_on_submit():
+        placeholder_config_raw = (form.placeholder_config.data or "").strip()
+        try:
+            field_config_raw = _validate_field_config(form.field_config.data or "")
+        except Exception as exc:
+            flash(f"Invalid fill-out fields JSON: {exc}", "danger")
+            return render_template("document_type_form.html", form=form, title="Edit Document Type", submit_label="Update", document_type=dt)
+        if placeholder_config_raw:
+            try:
+                parsed = json.loads(placeholder_config_raw)
+                if not isinstance(parsed, dict) or not isinstance(parsed.get("required", []), list):
+                    raise ValueError("placeholder config must be an object with a 'required' list")
+                required_placeholders = {str(x).strip() for x in parsed.get("required", []) if str(x).strip()}
+                if not required_placeholders:
+                    raise ValueError("'required' must contain at least one placeholder")
+            except Exception as exc:
+                flash(f"Invalid placeholder config JSON: {exc}", "danger")
+                return render_template("document_type_form.html", form=form, title="Edit Document Type", submit_label="Update", document_type=dt)
+        else:
+            required_placeholders = set(REQUIRED_PLACEHOLDERS)
+
         dt.name = form.name.data.strip()
         dt.description = form.description.data.strip() if form.description.data else None
-        dt.template_path = form.template_path.data or None
+        dt.validity_text = (form.validity_text.data or "").strip() or None
+        upload = request.files.get("template_file")
+        if upload and upload.filename:
+            old_template_path = dt.template_path
+            try:
+                template_path, template_filename = store_template_upload(upload, dt.name)
+                abs_template = resolve_stored_path_to_abs(template_path)
+                validation = validate_template_with_required(str(abs_template), required_placeholders, extra_allowed=_field_config_names(field_config_raw))
+                if validation["missing"]:
+                    flash(
+                        "Template is missing required placeholders: " + ", ".join(validation["missing"]),
+                        "danger",
+                    )
+                    return render_template("document_type_form.html", form=form, title="Edit Document Type", submit_label="Update", document_type=dt)
+                if validation["unknown"]:
+                    flash(
+                        "Template has unknown placeholders: " + ", ".join(validation["unknown"]),
+                        "warning",
+                    )
+                dt.template_path = template_path
+                dt.template_filename = template_filename
+                dt.template_uploaded_by_id = current_user.id
+                dt.template_uploaded_at = datetime.now(timezone.utc)
+                dt.template_version = int(dt.template_version or 0) + 1
+                if old_template_path and old_template_path != template_path:
+                    remove_template_file(old_template_path)
+            except Exception as exc:
+                flash(f"Template upload failed: {exc}", "danger")
+                return render_template("document_type_form.html", form=form, title="Edit Document Type", submit_label="Update", document_type=dt)
+
+        dt.template_active = bool(form.template_active.data) and bool(dt.template_path)
+        dt.placeholder_config = placeholder_config_raw or None
+        dt.field_config = field_config_raw
         dt.requires_photo = bool(form.requires_photo.data)
         db.session.commit()
         log_action("Updated document type", entity_type="document_type", entity_id=dt.id, meta={"name": dt.name})
         flash("Document type updated.", "success")
         return redirect(url_for("admin.list_document_types"))
-    return render_template("document_type_form.html", form=form, title="Edit Document Type", submit_label="Update")
+    return render_template("document_type_form.html", form=form, title="Edit Document Type", submit_label="Update", document_type=dt)
 
 
 @admin_bp.route("/document-types/<int:type_id>/delete", methods=["POST"])
@@ -345,6 +495,95 @@ def delete_document_type(type_id: int):
     log_action("Deleted document type", entity_type="document_type", entity_id=type_id, meta={"name": dt.name})
     flash("Document type deleted.", "success")
     return redirect(url_for("admin.list_document_types"))
+
+
+@admin_bp.route("/document-types/cleanup-templates", methods=["POST"])
+@login_required
+@roles_required("admin")
+def cleanup_document_type_templates():
+    root = template_storage_dir()
+    referenced: set[str] = set()
+    for dt in DocumentType.query.all():
+        if dt.template_path:
+            referenced.add(str(dt.template_path).strip().lstrip("/"))
+
+    deleted = 0
+    for path in root.rglob("*.docx"):
+        rel = str(path.relative_to(root).as_posix())
+        if rel not in referenced:
+            try:
+                path.unlink()
+                deleted += 1
+            except Exception:
+                continue
+
+    log_action("Cleaned up orphaned document templates", entity_type="document_type", meta={"deleted": deleted})
+    flash(f"Template cleanup finished. Deleted {deleted} orphaned file(s).", "success")
+    return redirect(url_for("admin.list_document_types"))
+
+
+@admin_bp.route("/officials")
+@login_required
+@roles_required("admin")
+def list_officials():
+    officials = Official.query.order_by(Official.is_active.desc(), Official.full_name.asc()).all()
+    return render_template("officials.html", officials=officials)
+
+
+@admin_bp.route("/officials/add", methods=["GET", "POST"])
+@login_required
+@roles_required("admin")
+def add_official():
+    form = OfficialForm()
+    if form.validate_on_submit():
+        official = Official(
+            full_name=form.full_name.data.strip(),
+            title=form.title.data.strip(),
+            is_active=bool(form.is_active.data),
+        )
+        signature_file = request.files.get("signature_file")
+        if signature_file and signature_file.filename:
+            signature_rel = save_uploaded_image(signature_file, "official_signatures")
+            official.signature_path = signature_rel
+
+        if official.is_active:
+            Official.query.update({"is_active": False})
+
+        db.session.add(official)
+        db.session.commit()
+        log_action("Created official", entity_type="official", entity_id=official.id, meta={"name": official.full_name})
+        flash("Official added.", "success")
+        return redirect(url_for("admin.list_officials"))
+    return render_template("official_form.html", form=form, title="Add Official", submit_label="Create")
+
+
+@admin_bp.route("/officials/<int:official_id>/edit", methods=["GET", "POST"])
+@login_required
+@roles_required("admin")
+def edit_official(official_id: int):
+    official = db.get_or_404(Official, official_id)
+    form = OfficialForm(obj=official)
+    if form.validate_on_submit():
+        official.full_name = form.full_name.data.strip()
+        official.title = form.title.data.strip()
+        signature_file = request.files.get("signature_file")
+        if signature_file and signature_file.filename:
+            signature_rel = save_uploaded_image(signature_file, "official_signatures")
+            official.signature_path = signature_rel
+
+        if form.is_active.data:
+            Official.query.update({"is_active": False})
+            official.is_active = True
+        else:
+            official.is_active = False
+
+        official.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        log_action("Updated official", entity_type="official", entity_id=official.id, meta={"name": official.full_name})
+        flash("Official updated.", "success")
+        return redirect(url_for("admin.list_officials"))
+
+    return render_template("official_form.html", form=form, title="Edit Official", submit_label="Update", official=official)
 
 
 # ------------------------------

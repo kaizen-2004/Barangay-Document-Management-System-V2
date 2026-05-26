@@ -9,9 +9,10 @@ import re
 
 from flask import current_app
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, DateField, SelectField, TextAreaField, SubmitField, HiddenField
 from wtforms import PasswordField, BooleanField
-from wtforms.validators import DataRequired, Optional, EqualTo, Regexp, Length, ValidationError
+from wtforms.validators import DataRequired, Optional, EqualTo, Length, ValidationError
 
 
 def _password_policy_errors(password: str) -> list[str]:
@@ -89,39 +90,20 @@ class DocumentTypeForm(FlaskForm):
 
     name = StringField("Name", validators=[DataRequired()])
     description = TextAreaField("Description", validators=[Optional()])
-    template_path = SelectField(
-        "PDF Template",
-        choices=[
-            ("", "Auto (by name)"),
-            ("barangay_id", "Barangay ID"),
-            ("barangay_clearance", "Barangay Clearance"),
-            ("business_clearance", "Business Clearance"),
-            ("residency", "Residency"),
-            ("generic", "Generic"),
-        ],
-        validators=[Optional()],
-    )
+    template_file = FileField("DOCX Template", validators=[Optional(), FileAllowed(["docx"], "DOCX templates only.")])
+    template_active = BooleanField("Template Active")
+    placeholder_config = TextAreaField("Placeholder Config (JSON)", validators=[Optional()])
+    field_config = TextAreaField("Fill-out Fields (JSON)", validators=[Optional()])
+    validity_text = StringField("Validity Text", validators=[Optional(), Length(max=120)])
     submit = SubmitField("Save")
 
 
 class LoginForm(FlaskForm):
-    """Form for users to log in to the system.
-
-    Authentication is based on a unique username rather than an email.
-    The username may differ from the user's email address, which is
-    stored separately for password reset notifications.
-    """
+    """Form for users to log in to the system."""
     username = StringField("Username", validators=[DataRequired()])
     password = PasswordField("Password", validators=[DataRequired()])
     remember = BooleanField("Remember Me")
     submit = SubmitField("Log In")
-
-
-class MfaVerifyForm(FlaskForm):
-    """Form for verifying the email OTP during admin MFA."""
-
-    otp_code = StringField("Verification Code", validators=[DataRequired()])
-    submit = SubmitField("Verify")
 
 
 class UserForm(FlaskForm):
@@ -132,19 +114,7 @@ class UserForm(FlaskForm):
     selection between admin and clerk roles.  Additional roles can be
     added by modifying the choices list.
     """
-    # Unique username used for login.  This may differ from the user's
-    # email address.  The username is not validated as an email.
     username = StringField("Username", validators=[DataRequired()])
-    # Email address used for password reset notifications.
-    # Use a simple regex to avoid requiring the external `email_validator` package.
-    email = StringField(
-        "Email",
-        validators=[
-            DataRequired(),
-            Length(max=255),
-            Regexp(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", message="Enter a valid email address."),
-        ],
-    )
     password = PasswordField("Password", validators=[DataRequired(), password_strength_required])
     role = SelectField(
         "Role",
@@ -161,17 +131,7 @@ class EditUserForm(FlaskForm):
     password will not be changed.  Administrators can use this form
     to update usernames, roles and optionally reset passwords.
     """
-    # Username used for login.  Separate from the user's email address.
     username = StringField("Username", validators=[DataRequired()])
-    # Email address associated with the user.  Used for password reset notifications.
-    email = StringField(
-        "Email",
-        validators=[
-            DataRequired(),
-            Length(max=255),
-            Regexp(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", message="Enter a valid email address."),
-        ],
-    )
     password = PasswordField("New Password", validators=[Optional(), password_strength_required])
     role = SelectField(
         "Role",
@@ -200,38 +160,15 @@ class PasswordChangeForm(FlaskForm):
     submit = SubmitField("Change Password")
 
 
-class ForgotPasswordForm(FlaskForm):
-    """Form for initiating a password reset via OTP.
-
-    Users provide their username (treated as email) to request a
-    password reset.  If a matching user exists, the system generates
-    an OTP and sends it to the user's email address.
-    """
-    username = StringField(
-        "Username",
-        validators=[DataRequired()],
+class OfficialForm(FlaskForm):
+    full_name = StringField("Full Name", validators=[DataRequired(), Length(max=150)])
+    title = StringField("Title", validators=[DataRequired(), Length(max=100)])
+    signature_file = FileField(
+        "Signature Image",
+        validators=[Optional(), FileAllowed(["png", "jpg", "jpeg"], "PNG/JPG only.")],
     )
-    submit = SubmitField("Send OTP")
-
-
-class ResetPasswordForm(FlaskForm):
-    """Form for completing a password reset using an OTP.
-
-    Users must enter their username, the OTP code they received, and
-    their desired new password twice for confirmation.  The
-    `EqualTo` validator ensures the password fields match.
-    """
-    username = StringField(
-        "Username",
-        validators=[DataRequired()],
-    )
-    otp_code = StringField("OTP Code", validators=[DataRequired()])
-    new_password = PasswordField("New Password", validators=[DataRequired(), password_strength_required])
-    confirm_new_password = PasswordField(
-        "Confirm New Password",
-        validators=[DataRequired(), EqualTo("new_password", message="Passwords must match")],
-    )
-    submit = SubmitField("Reset Password")
+    is_active = BooleanField("Set as active official")
+    submit = SubmitField("Save")
 
 
 class DeleteForm(FlaskForm):

@@ -1,7 +1,11 @@
 import os
 from datetime import date
+from urllib.parse import quote_plus
+import warnings
 
 import pytest
+import pymysql
+from sqlalchemy.engine import make_url
 
 from barangay_project.app import create_app
 from barangay_project.config import TestingConfig
@@ -9,18 +13,62 @@ from barangay_project.extensions import db
 from barangay_project.models import DocumentType, Resident, User
 
 
+def _default_test_database_url() -> str:
+    user = os.environ.get("TEST_DB_USER", "root")
+    password = os.environ.get("TEST_DB_PASSWORD", "")
+    host = os.environ.get("TEST_DB_HOST", "127.0.0.1")
+    port = os.environ.get("TEST_DB_PORT", "3306")
+    name = os.environ.get("TEST_DB_NAME", "barangay_test")
+    charset = os.environ.get("TEST_DB_CHARSET", "utf8mb4")
+
+    encoded_password = quote_plus(password)
+    return f"mysql+pymysql://{user}:{encoded_password}@{host}:{port}/{name}?charset={charset}"
+
+
+def _ensure_test_database(test_db_url: str) -> None:
+    parsed = make_url(test_db_url)
+    if not parsed.drivername.startswith("mysql"):
+        return
+
+    conn = pymysql.connect(
+        host=parsed.host or "127.0.0.1",
+        port=int(parsed.port or 3306),
+        user=parsed.username or "root",
+        password=parsed.password or "",
+        charset="utf8mb4",
+        autocommit=True,
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{parsed.database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+    finally:
+        conn.close()
+
+
 @pytest.fixture
 def app(tmp_path):
-    db_path = tmp_path / "test.sqlite"
     upload_dir = tmp_path / "uploads"
+    configured_test_db_url = os.environ.get("TEST_DATABASE_URL")
+    if configured_test_db_url:
+        test_db_url = configured_test_db_url
+        _ensure_test_database(test_db_url)
+    else:
+        mysql_candidate = _default_test_database_url()
+        try:
+            _ensure_test_database(mysql_candidate)
+            test_db_url = mysql_candidate
+        except Exception as exc:
+            test_db_url = f"sqlite:///{tmp_path / 'test.sqlite3'}"
+            warnings.warn(
+                f"MySQL test database unavailable ({exc}); falling back to SQLite for local tests.",
+                RuntimeWarning,
+            )
 
     class TestConfig(TestingConfig):
-        SQLALCHEMY_DATABASE_URI = f"sqlite:///{db_path}"
+        SQLALCHEMY_DATABASE_URI = test_db_url
         WTF_CSRF_ENABLED = False
-        ADMIN_MFA_REQUIRED = False
         LOGIN_RATE_LIMIT_MAX = 3
         LOGIN_RATE_LIMIT_WINDOW_SECONDS = 60
-        MAIL_SUPPRESS_SEND = True
         AUTO_MIGRATE = False
         AUTO_CREATE_DB = True
         UPLOAD_FOLDER = str(upload_dir)
@@ -53,10 +101,9 @@ def db_session(app):
 
 @pytest.fixture
 def make_user(db_session):
-    def _make_user(username, password, role="clerk", email=None):
+    def _make_user(username, password, role="clerk"):
         user = User(
             username=username,
-            email=email or f"{username}@example.com",
             role=role,
         )
         user.set_password(password)

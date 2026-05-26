@@ -1,1 +1,3 @@
 pytest>=7.4
+httpx>=0.27
+pyinstaller>=6.0
