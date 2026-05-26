@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bdm-form-card">
+<form method="post" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="form-group">
+        {{ form.username.label(class_="form-label") }}
+        {{ form.username(class_="form-control", placeholder="Enter username") }}
+        {% for error in form.username.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="form-group">
+        {{ form.role.label(class_="form-label") }}
+        {{ form.role(class_="form-control") }}
+        {% for error in form.role.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="form-group">
+        {{ form.password.label(class_="form-label") }}
+        {{ form.password(class_="form-control", placeholder="Leave blank to keep current password") }}
+        <div class="form-text text-muted">If changing, use at least 10 characters with upper, lower, number, and symbol.</div>
+        {% for error in form.password.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="bdm-form-actions">
+      <button type="submit" class="btn btn-primary">Update</button>
+      <a href="{{ url_for('admin.list_users') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+</form>
+</div>
+{% endblock %}

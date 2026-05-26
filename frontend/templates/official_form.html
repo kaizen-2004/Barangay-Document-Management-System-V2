@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="bdm-form-card">
+<form method="POST" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+
+    <div class="form-group">
+        {{ form.full_name.label(class="form-label") }}
+        {{ form.full_name(class="form-control") }}
+        {% for error in form.full_name.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <div class="form-group">
+        {{ form.title.label(class="form-label") }}
+        {{ form.title(class="form-control") }}
+        {% for error in form.title.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <div class="form-group">
+        {{ form.signature_file.label(class="form-label") }}
+        {{ form.signature_file(class="form-control") }}
+        {% for error in form.signature_file.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+        {% if official and official.signature_path %}
+            <div class="form-text">Current signature: uploaded</div>
+        {% endif %}
+    </div>
+
+    <div class="form-check mb-3">
+        {{ form.is_active(class="form-check-input") }}
+        {{ form.is_active.label(class="form-check-label") }}
+    </div>
+
+    <div class="bdm-form-actions">
+        <button type="submit" class="btn btn-primary">{{ submit_label or 'Save' }}</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.list_officials') }}">Cancel</a>
+    </div>
+</form>
+</div>
+{% endblock %}
