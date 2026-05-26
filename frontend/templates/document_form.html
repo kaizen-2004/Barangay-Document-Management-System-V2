@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="bdm-form-card">
+<form method="POST">
+    {{ form.hidden_tag() }}
+    <div class="form-group">
+        {{ form.resident_id.label(class="form-label") }}
+        {{ form.resident_id(class="form-control") }}
+        {% for error in form.resident_id.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="form-group">
+        {{ form.document_type_id.label(class="form-label") }}
+        {{ form.document_type_id(class="form-control") }}
+        {% for error in form.document_type_id.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="form-group">
+        {{ form.details.label(class="form-label", id="details-label") }}
+        {{ form.details(class="form-control", rows=4, placeholder="Details", id="details") }}
+        {% for error in form.details.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="form-group">
+        {{ form.issue_date.label(class="form-label") }}
+        {{ form.issue_date(class="form-control") }}
+        {% for error in form.issue_date.errors %}
+            <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <div id="custom-fields" class="bdm-form-section" style="display: none;">
+        <h3 class="bdm-form-section-title">Additional Information</h3>
+        <div id="custom-fields-body" class="bdm-form-grid"></div>
+        <div class="bdm-form-help mt-2">These fields change based on the selected document type.</div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header">
+            <strong>Resident Photo</strong>
+            <div class="text-muted" style="font-size: .9rem">Capture from camera (no file uploads).</div>
+        </div>
+        <div class="card-body">
+            {{ form.resident_photo_data(id="resident_photo_data") }}
+            <div class="row">
+                <div class="col" style="min-width: 260px">
+                    <div class="bdm-camera-frame">
+                        <video id="camVideo" autoplay playsinline></video>
+                    </div>
+                    <div class="bdm-camera-actions mt-3">
+                        <button type="button" id="captureBtn" class="btn btn-primary">Capture Photo</button>
+                    </div>
+                    <small class="text-muted d-block" style="margin-top: .5rem">
+                        Tip: This photo will be saved to the selected resident (used for ID/certificates that require a photo).
+                    </small>
+                </div>
+                <div class="col" style="min-width: 260px">
+                    <div class="text-muted" style="margin-bottom: .5rem">Preview</div>
+                    <div class="bdm-camera-frame">
+                        <img id="photoPreview" alt="Preview" style="display: none;" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="bdm-form-actions">
+        <button type="submit" class="btn btn-primary">{{ form.submit.label.text }}</button>
+    </div>
+</form>
+</div>
+
+<script>
+(function() {
+  const video = document.getElementById('camVideo');
+  const captureBtn = document.getElementById('captureBtn');
+  const preview = document.getElementById('photoPreview');
+  const hidden = document.getElementById('resident_photo_data');
+  if (!video || !captureBtn || !hidden) return;
+
+  async function startCam() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = stream;
+    } catch (e) {
+      console.warn('Camera unavailable:', e);
+      captureBtn.disabled = true;
+      captureBtn.textContent = 'Camera unavailable';
+    }
+  }
+
+  captureBtn.addEventListener('click', () => {
+    if (!video.videoWidth) return;
+    const canvas = document.createElement('canvas');
+    const targetSize = 700;
+    canvas.width = targetSize;
+    canvas.height = targetSize;
+    const ctx = canvas.getContext('2d');
+    const srcW = video.videoWidth;
+    const srcH = video.videoHeight;
+    const side = Math.min(srcW, srcH);
+    const sx = Math.floor((srcW - side) / 2);
+    const sy = Math.floor((srcH - side) / 2);
+    ctx.drawImage(video, sx, sy, side, side, 0, 0, targetSize, targetSize);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    hidden.value = dataUrl;
+    if (preview) {
+      preview.src = dataUrl;
+      preview.style.display = 'block';
+    }
+  });
+
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    startCam();
+  } else {
+    captureBtn.disabled = true;
+    captureBtn.textContent = 'Camera not supported';
+  }
+
+  const docTypeSelect = document.getElementById('document_type_id');
+  const detailsLabel = document.getElementById('details-label');
+  const detailsField = document.getElementById('details');
+  const customFieldsWrap = document.getElementById('custom-fields');
+  const customFieldsBody = document.getElementById('custom-fields-body');
+  const fieldConfigs = {{ document_type_field_configs | default({}) | tojson }};
+  const existingValues = {{ custom_field_values | default({}) | tojson }};
+
+  function updateDetailsLabel() {
+    if (!docTypeSelect || !detailsLabel || !detailsField) return;
+    const selected = docTypeSelect.options[docTypeSelect.selectedIndex];
+    const isResidency = selected && selected.text.toLowerCase().includes('residency');
+    detailsLabel.textContent = isResidency ? 'Purpose' : 'Details';
+    detailsField.placeholder = isResidency ? 'Purpose' : 'Details';
+  }
+
+  if (docTypeSelect) {
+    updateDetailsLabel();
+    docTypeSelect.addEventListener('change', updateDetailsLabel);
+  }
+
+  function renderCustomFields() {
+    if (!docTypeSelect || !customFieldsWrap || !customFieldsBody) return;
+    const config = fieldConfigs[docTypeSelect.value] || { fields: [] };
+    const fields = Array.isArray(config.fields) ? config.fields : [];
+    customFieldsBody.innerHTML = '';
+    customFieldsWrap.style.display = fields.length ? '' : 'none';
+
+    fields.forEach((field) => {
+      const name = String(field.name || '').trim();
+      if (!name) return;
+      const id = `field_${name}`;
+      const value = existingValues[id] ?? existingValues[name] ?? '';
+      const group = document.createElement('div');
+      group.className = 'form-group';
+
+      const label = document.createElement('label');
+      label.className = 'form-label';
+      label.htmlFor = id;
+      label.textContent = field.label || name.replaceAll('_', ' ');
+      if (field.required) {
+        const required = document.createElement('span');
+        required.className = 'bdm-required';
+        required.textContent = ' *';
+        label.appendChild(required);
+      }
+
+      let input;
+      if (field.type === 'textarea') {
+        input = document.createElement('textarea');
+        input.rows = 3;
+      } else {
+        input = document.createElement('input');
+        input.type = ['date', 'number'].includes(field.type) ? field.type : 'text';
+      }
+      input.className = 'form-control';
+      input.name = id;
+      input.id = id;
+      input.value = value;
+      if (field.required) input.required = true;
+
+      group.appendChild(label);
+      group.appendChild(input);
+      customFieldsBody.appendChild(group);
+    });
+  }
+
+  if (docTypeSelect) {
+    renderCustomFields();
+    docTypeSelect.addEventListener('change', renderCustomFields);
+  }
+})();
+</script>
+{% endblock %}

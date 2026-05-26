@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+{# Page header with title, subtitle and export actions #}
+<div class="bdm-report-hero bdm-section">
+  <div>
+    <h2>Document Reports</h2>
+    <p>Filter issued documents by date range and export the current result set.</p>
+  </div>
+  <div class="bdm-section-actions">
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.export_reports', fmt='csv', date_from=date_from, date_to=date_to) }}">CSV</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.export_reports', fmt='xlsx', date_from=date_from, date_to=date_to) }}">Excel</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.export_reports', fmt='pdf', date_from=date_from, date_to=date_to) }}">PDF</a>
+  </div>
+</div>
+
+{# Date filter #}
+<form method="get" class="bdm-filter-card bdm-section">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-5">
+      <label class="form-label small mb-1">From</label>
+      <input type="date" class="form-control" name="date_from" value="{{ date_from }}">
+    </div>
+    <div class="col-md-5">
+      <label class="form-label small mb-1">To</label>
+      <input type="date" class="form-control" name="date_to" value="{{ date_to }}">
+    </div>
+    <div class="col-md-2 d-flex gap-2">
+      <button class="btn btn-primary w-100" type="submit">Apply</button>
+      <a class="btn btn-outline-secondary w-100" href="{{ url_for('main.reports') }}">Reset</a>
+    </div>
+  </div>
+</form>
+
+{# Metrics summary row #}
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="bdm-metric-card h-100">
+      <div>
+        <div class="text-muted small">Documents in range</div>
+        <div class="h2 fw-semibold mb-0">{{ total_documents }}</div>
+        <div class="text-muted small">{{ date_from or 'Start' }} to {{ date_to or 'Today' }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-8">
+    <div class="bdm-metric-card h-100">
+      <div class="w-100">
+        <div class="text-muted small mb-2">Breakdown by document type</div>
+        <div class="bdm-report-type-list">
+          {% for name, count in by_type.items() %}
+            {% set percent = (count / total_documents * 100) if total_documents else 0 %}
+            <div class="bdm-report-type-row">
+              <div class="d-flex justify-content-between gap-3 small">
+                <strong>{{ name }}</strong>
+                <span>{{ count }}</span>
+              </div>
+              <div class="bdm-report-bar" aria-hidden="true"><span style="width: {{ percent }}%;"></span></div>
+            </div>
+          {% else %}
+            <span class="text-muted">No data</span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Document list table #}
+<div class="bdm-table-card">
+  <div class="bdm-table-toolbar px-3 pt-3">
+    <div>
+      <div class="bdm-table-title">Issued documents</div>
+      <div class="text-muted small">{{ total_documents }} result{{ '' if total_documents == 1 else 's' }} in the selected range.</div>
+    </div>
+    <div class="bdm-table-actions">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.export_reports', fmt='csv', date_from=date_from, date_to=date_to) }}">Export CSV</a>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>Resident</th>
+          <th>Document Type</th>
+          <th>Issue Date</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in documents %}
+        <tr>
+          <td>{{ d.id }}</td>
+          <td>{{ d.resident.first_name }} {{ d.resident.last_name }}</td>
+          <td>{{ d.document_type.name if d.document_type else '—' }}</td>
+          <td>{{ d.issue_date.strftime('%Y-%m-%d') if d.issue_date else '—' }}</td>
+          <td class="text-truncate" style="max-width: 380px;">{{ d.details }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-muted p-3">No documents found for this date range.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include '_pagination.html' %}
+{% endblock %}

@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="bdm-form-card">
+<form method="POST" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+
+    <div class="form-group">
+        {{ form.name.label(class="form-label") }}
+        {{ form.name(class="form-control") }}
+        {% for error in form.name.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <div class="form-group">
+        {{ form.description.label(class="form-label") }}
+        {{ form.description(class="form-control", rows=3) }}
+        {% for error in form.description.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <div class="form-group">
+        {{ form.template_file.label(class="form-label") }}
+        {{ form.template_file(class="form-control") }}
+        {% for error in form.template_file.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+        <div class="form-text">Upload a .docx template containing the required placeholders.</div>
+        {% if document_type and document_type.template_filename %}
+            <div class="form-text">Current: {{ document_type.template_filename }} (v{{ document_type.template_version or 1 }})</div>
+        {% endif %}
+    </div>
+
+    <div class="form-check mb-3">
+        {{ form.template_active(class="form-check-input") }}
+        {{ form.template_active.label(class="form-check-label") }}
+    </div>
+
+    <div class="form-group">
+        {{ form.validity_text.label(class="form-label") }}
+        {{ form.validity_text(class="form-control", placeholder="e.g. 6 months, 1 year") }}
+        {% for error in form.validity_text.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+        <div class="form-text">Used for <code>{{ validity }}</code> placeholder. Leave blank to use automatic default.</div>
+    </div>
+
+    <div class="form-group">
+        {{ form.placeholder_config.label(class="form-label") }}
+        {{ form.placeholder_config(class="form-control d-none", rows=7, placeholder='{"required": ["resident_name", "address", "purpose", "issue_date", "resident_photo", "qr_code"]}') }}
+        {% for error in form.placeholder_config.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+        <div class="form-text">Choose which template placeholders are required for this document type.</div>
+
+        <div class="mt-2">
+            <div class="small text-muted mb-1">Required template placeholders</div>
+            <div id="placeholder-picker" class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="resident_name">resident_name</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="address">address</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="purpose">purpose</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="issue_date">issue_date</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="resident_photo">resident_photo</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="qr_code">qr_code</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="resident_id">resident_id</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="birth_date">birth_date</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="marital_status">marital_status</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="year_on_barangay">year_on_barangay</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="validity">validity</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="author">author</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="document_id">document_id</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="document_type">document_type</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="captain_name">captain_name</button>
+            </div>
+            <div id="custom-placeholder-wrap" class="mt-2" style="display: none;">
+                <div class="small text-muted mb-1">Custom placeholders from fill-out fields</div>
+                <div id="custom-placeholder-list" class="d-flex flex-wrap gap-2"></div>
+            </div>
+            <div class="mt-2 d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="btn-default-placeholders">Use Default Required</button>
+                <button type="button" class="btn btn-sm btn-outline-danger" id="btn-clear-placeholders">Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group">
+        {{ form.field_config.label(class="form-label") }}
+        {{ form.field_config(class="form-control d-none", rows=8, placeholder='{"fields": [{"name": "contact_number", "label": "Contact Number", "type": "text", "required": true}]}') }}
+        {% for error in form.field_config.errors %}
+            <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+        <div class="form-text">Add the extra information users must fill out when creating this document.</div>
+        <div class="bdm-field-builder mt-2">
+            <div class="bdm-field-builder-head d-none d-md-grid">
+                <span>Field Label</span>
+                <span>Placeholder Name</span>
+                <span>Type</span>
+                <span>Required</span>
+                <span></span>
+            </div>
+            <div id="field-builder-rows" class="bdm-field-builder-rows"></div>
+            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="btn-add-field">Add Field</button>
+        </div>
+    </div>
+
+    <div class="form-check mb-3">
+        {{ form.requires_photo(class="form-check-input") }}
+        {{ form.requires_photo.label(class="form-check-label") }}
+    </div>
+
+    <div class="bdm-form-actions">
+        <button type="submit" class="btn btn-primary">{{ submit_label or 'Save' }}</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.list_document_types') }}">Cancel</a>
+    </div>
+</form>
+</div>
+
+<script>
+  (function () {
+    const textarea = document.getElementById('placeholder_config');
+    const fieldTextarea = document.getElementById('field_config');
+    const picker = document.getElementById('placeholder-picker');
+    const defaultBtn = document.getElementById('btn-default-placeholders');
+    const clearBtn = document.getElementById('btn-clear-placeholders');
+    const fieldRows = document.getElementById('field-builder-rows');
+    const addFieldBtn = document.getElementById('btn-add-field');
+    const customPlaceholderWrap = document.getElementById('custom-placeholder-wrap');
+    const customPlaceholderList = document.getElementById('custom-placeholder-list');
+    if (!textarea || !picker) return;
+
+    const defaultRequired = [
+      'resident_name',
+      'address',
+      'purpose',
+      'issue_date',
+      'resident_photo',
+      'qr_code'
+    ];
+
+    function parseConfig() {
+      const raw = (textarea.value || '').trim();
+      if (!raw) return { required: [] };
+      try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return { required: [] };
+        const required = Array.isArray(parsed.required) ? parsed.required.map(String) : [];
+        return { required };
+      } catch {
+        return { required: [] };
+      }
+    }
+
+    function writeConfig(required) {
+      const unique = Array.from(new Set(required.map((x) => String(x).trim()).filter(Boolean)));
+      textarea.value = JSON.stringify({ required: unique }, null, 2);
+      paintSelected(unique);
+    }
+
+    function paintSelected(required) {
+      picker.querySelectorAll('button[data-ph]').forEach((btn) => {
+        const on = required.includes(btn.dataset.ph);
+        btn.classList.toggle('btn-outline-secondary', !on);
+        btn.classList.toggle('btn-secondary', on);
+      });
+    }
+
+    picker.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-ph]');
+      if (!btn) return;
+      const config = parseConfig();
+      const set = new Set(config.required);
+      const key = btn.dataset.ph;
+      if (set.has(key)) set.delete(key); else set.add(key);
+      writeConfig(Array.from(set));
+    });
+
+    defaultBtn?.addEventListener('click', () => writeConfig(defaultRequired));
+    clearBtn?.addEventListener('click', () => writeConfig([]));
+
+    paintSelected(parseConfig().required);
+
+    function slugifyFieldName(label) {
+      return String(label || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    }
+
+    function parseFields() {
+      const raw = (fieldTextarea?.value || '').trim();
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed.fields) ? parsed.fields : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function writeFields() {
+      if (!fieldTextarea || !fieldRows) return;
+      const fields = Array.from(fieldRows.querySelectorAll('.bdm-field-row')).map((row) => {
+        const label = row.querySelector('[data-field="label"]').value.trim();
+        const nameInput = row.querySelector('[data-field="name"]');
+        const name = (nameInput.value.trim() || slugifyFieldName(label));
+        nameInput.value = name;
+        return {
+          name,
+          label: label || name.replaceAll('_', ' '),
+          type: row.querySelector('[data-field="type"]').value,
+          required: row.querySelector('[data-field="required"]').checked,
+        };
+      }).filter((field) => field.name);
+      fieldTextarea.value = fields.length ? JSON.stringify({ fields }, null, 2) : '';
+      syncFieldPlaceholders(fields);
+    }
+
+    function syncFieldPlaceholders(fields) {
+      const config = parseConfig();
+      const builtIn = new Set(Array.from(picker.querySelectorAll('button[data-ph]')).map((btn) => btn.dataset.ph));
+      const customNames = fields.map((field) => field.name).filter(Boolean);
+      const required = config.required.filter((name) => builtIn.has(name) || customNames.includes(name));
+      writeConfig([...required, ...customNames]);
+      renderCustomPlaceholders(customNames);
+    }
+
+    function renderCustomPlaceholders(customNames) {
+      if (!customPlaceholderWrap || !customPlaceholderList) return;
+      customPlaceholderList.innerHTML = '';
+      customPlaceholderWrap.style.display = customNames.length ? '' : 'none';
+      customNames.forEach((name) => {
+        const badge = document.createElement('span');
+        badge.className = 'btn btn-sm btn-secondary disabled';
+        badge.textContent = name;
+        customPlaceholderList.appendChild(badge);
+      });
+    }
+
+    function addFieldRow(field = {}) {
+      if (!fieldRows) return;
+      const row = document.createElement('div');
+      row.className = 'bdm-field-row';
+      row.innerHTML = `
+        <input class="form-control form-control-sm" data-field="label" placeholder="Contact Number" value="${String(field.label || '').replaceAll('"', '&quot;')}">
+        <input class="form-control form-control-sm" data-field="name" placeholder="contact_number" value="${String(field.name || '').replaceAll('"', '&quot;')}">
+        <select class="form-select form-select-sm" data-field="type">
+          <option value="text">Text</option>
+          <option value="textarea">Long Text</option>
+          <option value="date">Date</option>
+          <option value="number">Number</option>
+        </select>
+        <label class="form-check bdm-field-required"><input class="form-check-input" type="checkbox" data-field="required"> <span>Required</span></label>
+        <button type="button" class="btn btn-sm btn-outline-danger" data-remove-field>Remove</button>
+      `;
+      row.querySelector('[data-field="type"]').value = field.type || 'text';
+      row.querySelector('[data-field="required"]').checked = Boolean(field.required);
+      row.addEventListener('input', writeFields);
+      row.addEventListener('change', writeFields);
+      row.querySelector('[data-remove-field]').addEventListener('click', () => {
+        row.remove();
+        writeFields();
+      });
+      fieldRows.appendChild(row);
+    }
+
+    parseFields().forEach(addFieldRow);
+    writeFields();
+    addFieldBtn?.addEventListener('click', () => {
+      addFieldRow();
+      writeFields();
+    });
+  })();
+</script>
+{% endblock %}

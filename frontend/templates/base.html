@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Barangay DMS{% endblock %}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
+  <!-- Font Awesome for icons -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  {# allow individual pages to inject additional CSS or head elements #}
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<nav class="navbar navbar-dark bdm-navbar bdm-navbar-top border-bottom border-dark-subtle">
+  <div class="container bdm-topbar">
+    <div class="bdm-topbar-left">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('main.index') }}">
+        <div class="brand-logo-group">
+          <img class="brand-logo" src="{{ url_for('static', filename='logo/logo.jpg') }}" alt="Barangay logo">
+          <img class="brand-logo" src="{{ url_for('static', filename='logo/renz-logo.png') }}" alt="Renz logo">
+        </div>
+        <span class="brand-title brand-title-full d-none d-lg-inline">Barangay DMS</span>
+        <span class="brand-title brand-title-short d-inline d-lg-none">Barangay DMS</span>
+      </a>
+    </div>
+    <div class="bdm-topbar-center">RENZPONSABLENG BARANGAY</div>
+    <div class="bdm-topbar-right">
+      <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNav" aria-controls="mobileNav" aria-label="Open navigation menu">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      {% if current_user.is_authenticated %}
+        <span class="navbar-text bdm-topbar-clock text-white-50" id="topbar-clock" aria-live="polite"></span>
+      {% else %}
+        {% if request.endpoint == 'auth.login' %}
+          <span class="navbar-text bdm-login-clock text-white-50" id="login-clock" aria-live="polite"></span>
+        {% else %}
+          <a class="btn btn-sm btn-outline-light" href="{{ url_for('auth.login') }}">Login</a>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</nav>
+<!-- Offcanvas mobile navigation -->
+<div class="offcanvas offcanvas-start text-bg-dark" tabindex="-1" id="mobileNav" aria-labelledby="mobileNavLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="mobileNavLabel">Menu</h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body">
+    <nav class="nav flex-column">
+      {% if current_user.is_authenticated %}
+        <a class="nav-link text-white{% if request.endpoint == 'main.index' %} active{% endif %}" href="{{ url_for('main.index') }}">
+          Dashboard
+        </a>
+        <a class="nav-link text-white{% if request.endpoint == 'main.global_search' %} active{% endif %}" href="{{ url_for('main.global_search') }}">
+          Search
+        </a>
+        <a class="nav-link text-white{% if request.endpoint in ['main.list_residents','main.list_archived_residents'] %} active{% endif %}" href="{{ url_for('main.list_residents') }}">
+          Residents
+        </a>
+        <a class="nav-link text-white{% if request.endpoint in ['main.list_documents','main.list_archived_documents'] %} active{% endif %}" href="{{ url_for('main.list_documents') }}">
+          Documents
+        </a>
+        <a class="nav-link text-white{% if request.endpoint == 'main.reports' %} active{% endif %}" href="{{ url_for('main.reports') }}">
+          Reports
+        </a>
+        {% if current_user.role == 'admin' %}
+          <hr class="dropdown-divider border-secondary">
+          <a class="nav-link text-white{% if request.endpoint == 'admin.list_users' %} active{% endif %}" href="{{ url_for('admin.list_users') }}">
+            Users
+          </a>
+          <a class="nav-link text-white{% if request.endpoint == 'admin.list_document_types' %} active{% endif %}" href="{{ url_for('admin.list_document_types') }}">
+            Doc Types
+          </a>
+          <a class="nav-link text-white{% if request.endpoint == 'admin.list_officials' %} active{% endif %}" href="{{ url_for('admin.list_officials') }}">
+            Officials
+          </a>
+          <a class="nav-link text-white{% if request.endpoint == 'admin.audit_logs' %} active{% endif %}" href="{{ url_for('admin.audit_logs') }}">
+            Audit Logs
+          </a>
+          <a class="nav-link text-white{% if request.endpoint == 'admin.backups' %} active{% endif %}" href="{{ url_for('admin.backups') }}">
+            Backups
+          </a>
+        {% endif %}
+      {% else %}
+        <a class="nav-link text-white{% if request.endpoint == 'auth.login' %} active{% endif %}" href="{{ url_for('auth.login') }}">
+          Login
+        </a>
+      {% endif %}
+    </nav>
+  </div>
+</div>
+
+{% if current_user.is_authenticated %}
+  <div class="bdm-layout bdm-app-shell">
+    <aside class="bdm-sidebar d-flex flex-column">
+      <nav class="nav flex-column flex-grow-1">
+        {# Main section #}
+        <div class="bdm-sidebar-section-title bdm-sidebar-section">Main</div>
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'main.index' %} active{% endif %}" href="{{ url_for('main.index') }}">
+          <span class="bdm-link-text">Dashboard</span>
+        </a>
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'main.global_search' %} active{% endif %}" href="{{ url_for('main.global_search') }}">
+          <span class="bdm-link-text">Search</span>
+        </a>
+        {# Records section #}
+        <div class="bdm-sidebar-section-title bdm-sidebar-section">Records</div>
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint in ['main.list_residents','main.list_archived_residents'] %} active{% endif %}" href="{{ url_for('main.list_residents') }}">
+          <span class="bdm-link-text">Residents</span>
+        </a>
+        {# Documents section #}
+        <div class="bdm-sidebar-section-title bdm-sidebar-section">Documents</div>
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint in ['main.list_documents','main.list_archived_documents'] %} active{% endif %}" href="{{ url_for('main.list_documents') }}">
+          <span class="bdm-link-text">Documents</span>
+        </a>
+        {# Reports section #}
+        <div class="bdm-sidebar-section-title bdm-sidebar-section">Reports</div>
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'main.reports' %} active{% endif %}" href="{{ url_for('main.reports') }}">
+          <span class="bdm-link-text">Reports</span>
+        </a>
+        {# Admin section #}
+        {% if current_user.role == 'admin' %}
+          <div class="bdm-sidebar-section-title bdm-sidebar-section">Admin</div>
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_users' %} active{% endif %}" href="{{ url_for('admin.list_users') }}">
+            <span class="bdm-link-text">Users</span>
+          </a>
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_document_types' %} active{% endif %}" href="{{ url_for('admin.list_document_types') }}">
+            <span class="bdm-link-text">Doc Types</span>
+          </a>
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_officials' %} active{% endif %}" href="{{ url_for('admin.list_officials') }}">
+            <span class="bdm-link-text">Officials</span>
+          </a>
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.audit_logs' %} active{% endif %}" href="{{ url_for('admin.audit_logs') }}">
+            <span class="bdm-link-text">Audit Logs</span>
+          </a>
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.backups' %} active{% endif %}" href="{{ url_for('admin.backups') }}">
+            <span class="bdm-link-text">Backups</span>
+          </a>
+        {% endif %}
+      </nav>
+      {# Sidebar footer with user info and logout #}
+      <div class="bdm-sidebar-footer">
+        <div>Signed in as <strong>{{ current_user.username }}</strong></div>
+        <div class="bdm-user-role">Role: {{ current_user.role|title }}</div>
+        <a href="{{ url_for('auth.logout') }}">Logout</a>
+      </div>
+    </aside>
+    <div class="bdm-main bdm-content">
+      <div class="container-fluid">
+        {% set endpoint = request.endpoint or '' %}
+        {% set page_title_map = {
+          'main.index': 'Dashboard',
+          'main.global_search': 'Search',
+          'main.list_residents': 'Residents',
+          'main.list_archived_residents': 'Archived Residents',
+          'main.add_resident': 'Add Resident',
+          'main.edit_resident': 'Edit Resident',
+          'main.resident_profile': 'Resident Profile',
+          'main.list_documents': 'Documents',
+          'main.list_archived_documents': 'Archived Documents',
+          'main.issue_document': 'Create Draft',
+          'main.edit_document': 'Edit Document',
+          'main.document_history': 'Document History',
+          'main.reports': 'Reports',
+          'auth.change_password': 'Change Password',
+          'admin.list_users': 'Users',
+          'admin.add_user': 'Add User',
+          'admin.edit_user': 'Edit User',
+          'admin.list_document_types': 'Document Types',
+          'admin.add_document_type': 'Add Document Type',
+          'admin.edit_document_type': 'Edit Document Type',
+          'admin.list_officials': 'Officials',
+          'admin.add_official': 'Add Official',
+          'admin.edit_official': 'Edit Official',
+          'admin.audit_logs': 'Audit Logs',
+          'admin.backups': 'Backups'
+        } %}
+        {% set page_title = page_title_map.get(endpoint, 'Dashboard') %}
+        {% set section = 'Admin' if endpoint.startswith('admin.') else 'Main' %}
+        {# Application header (breadcrumb, search, quick actions, and user actions) #}
+        {% block app_header %}
+          <header class="bdm-app-header">
+            <div class="bdm-header-meta">
+              <h1 class="bdm-page-title">{{ page_title }}</h1>
+              <div class="bdm-breadcrumb" aria-label="Breadcrumb">
+                <span>{{ section }}</span>
+                <span class="bdm-breadcrumb-separator" aria-hidden="true">/</span>
+                <span aria-current="page">{{ page_title }}</span>
+              </div>
+            </div>
+            <form class="bdm-quick-search" role="search" method="GET" action="{{ url_for('main.global_search') }}">
+              <div class="input-group">
+                <input class="form-control" type="search" name="q" placeholder="Quick search" aria-label="Quick search">
+              </div>
+            </form>
+            <div class="bdm-app-actions" aria-label="Quick actions">
+              <a class="btn btn-sm btn-primary" href="{{ url_for('main.add_resident') }}">Add Resident</a>
+              <a class="btn btn-sm btn-success" href="{{ url_for('main.issue_document') }}">Create Draft</a>
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.global_search') }}">Search Records</a>
+            </div>
+            <div class="bdm-header-user" aria-label="User actions">
+              <div class="bdm-header-user-text">
+                <strong>{{ current_user.username }}</strong>
+                <span>{{ current_user.role|title }}</span>
+              </div>
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('auth.logout') }}">Logout</a>
+            </div>
+          </header>
+        {% endblock %}
+{% else %}
+  <main class="container py-4">
+{% endif %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" data-auto-dismiss="3000">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+{% block content %}{% endblock %}
+
+{% if current_user.is_authenticated %}
+      </div>
+    </div>
+  </div>
+{% else %}
+  </main>
+{% endif %}
+
+<footer class="border-top py-4">
+  <div class="container text-center small text-muted">
+    Barangay Document Management and Archiving System
+  </div>
+  <div class="container text-center small text-muted">
+    Steve Villa
+  </div>  
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  window.addEventListener('load', () => {
+    document.querySelectorAll('.alert[data-auto-dismiss]').forEach((alertEl) => {
+      const timeoutMs = parseInt(alertEl.dataset.autoDismiss, 10) || 5000;
+      setTimeout(() => {
+        const alert = bootstrap.Alert.getOrCreateInstance(alertEl);
+        alert.close();
+      }, timeoutMs);
+    });
+
+    const clocks = [document.getElementById('login-clock'), document.getElementById('topbar-clock')].filter(Boolean);
+    if (clocks.length) {
+      const formatNow = () => {
+        const now = new Date();
+        const text = now.toLocaleString('en-PH', {
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
+        clocks.forEach((clock) => {
+          clock.textContent = text;
+        });
+      };
+      formatNow();
+      setInterval(formatNow, 1000);
+    }
+  });
+</script>
+
+  {# Allow pages to inject additional scripts at the end of the document #}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

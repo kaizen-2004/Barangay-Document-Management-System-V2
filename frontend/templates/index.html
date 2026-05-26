@@ -1,0 +1,266 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+{% import "_log_helpers.html" as loghelpers %}
+
+  {# Hero welcome panel #}
+  <div class="bdm-hero-card bdm-fade-in">
+    <div>
+      <h1>Welcome back, {{ current_user.username }}</h1>
+      <p>Manage residents, documents and reports from your personalized dashboard.</p>
+    </div>
+    <div class="bdm-hero-meta" aria-label="Dashboard highlights">
+      <span>{{ resident_count }} active residents</span>
+      <span>{{ draft_document_count }} drafts</span>
+      <span>{{ documents_this_month }} issued this month</span>
+    </div>
+  </div>
+
+  {# Quick action cards grid #}
+  <div class="bdm-quick-actions bdm-fade-in">
+    <a class="bdm-action-card" href="{{ url_for('main.add_resident') }}">
+      <div>
+        <div class="action-title">Add Resident</div>
+        <div class="action-desc">Create a new resident record</div>
+      </div>
+    </a>
+    <a class="bdm-action-card" href="{{ url_for('main.issue_document') }}">
+      <div>
+        <div class="action-title">Create Draft</div>
+        <div class="action-desc">Start a new document draft</div>
+      </div>
+    </a>
+    <a class="bdm-action-card" href="{{ url_for('main.global_search') }}">
+      <div>
+        <div class="action-title">Search Records</div>
+        <div class="action-desc">Find residents or documents</div>
+      </div>
+    </a>
+    <a class="bdm-action-card" href="{{ url_for('main.reports') }}">
+      <div>
+        <div class="action-title">View Reports</div>
+        <div class="action-desc">Explore analytics</div>
+      </div>
+    </a>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl">
+      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <div class="flex-grow-1">
+          <div class="text-muted small">Active Residents</div>
+          <div class="h2 fw-semibold mb-0">{{ resident_count }}</div>
+          <div class="text-muted small">Registered profiles</div>
+        </div>
+        <a class="btn btn-primary btn-sm ms-auto" href="{{ url_for('main.list_residents') }}">Open</a>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl">
+      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <div class="flex-grow-1">
+          <div class="text-muted small">Issued Documents</div>
+          <div class="h2 fw-semibold mb-0">{{ document_count }}</div>
+          <div class="text-muted small">Certificates / clearances</div>
+        </div>
+        <a class="btn btn-success btn-sm ms-auto" href="{{ url_for('main.list_documents') }}">Open</a>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl">
+      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <div class="flex-grow-1">
+          <div class="text-muted small">This month</div>
+          <div class="h2 fw-semibold mb-0">{{ documents_this_month }}</div>
+          <div class="text-muted small">Documents issued</div>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm ms-auto" href="{{ url_for('main.reports') }}">Reports</a>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl">
+      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <div class="flex-grow-1">
+          <div class="text-muted small">Drafts</div>
+          <div class="h2 fw-semibold mb-0">{{ draft_document_count }}</div>
+          <div class="text-muted small">Pending documents</div>
+        </div>
+        <a class="btn btn-outline-primary btn-sm ms-auto" href="{{ url_for('main.list_documents', status='draft') }}">Review</a>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl">
+      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <div class="flex-grow-1">
+          <div class="text-muted small">Archived</div>
+          <div class="h2 fw-semibold mb-0">{{ archived_resident_count + archived_document_count }}</div>
+          <div class="text-muted small">Residents + documents</div>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm ms-auto" href="{{ url_for('main.list_archived_residents') }}">View</a>
+      </div>
+    </div>
+  </div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-4">
+    <div class="bdm-chart-card h-100">
+      <div class="card-header bg-transparent">
+        <div class="fw-semibold">Residents by gender</div>
+        <div class="text-muted small">Quick distribution of profiles.</div>
+      </div>
+      <div class="card-body bdm-chart-body">
+        <canvas id="genderChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="bdm-chart-card h-100">
+      <div class="card-header bg-transparent">
+        <div class="fw-semibold">Documents by type</div>
+        <div class="text-muted small">Top issued document types.</div>
+      </div>
+      <div class="card-body bdm-chart-body">
+        <canvas id="docTypeChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="bdm-chart-card h-100">
+      <div class="card-header bg-transparent">
+        <div class="fw-semibold">Documents trend</div>
+        <div class="text-muted small">Issued documents (last 6 months).</div>
+      </div>
+      <div class="card-body bdm-chart-body">
+        <canvas id="docsTrendChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Recent activity section as a timeline #}
+<div class="bdm-section-header d-flex justify-content-between align-items-center mb-2">
+  <div>
+    <h3 class="bdm-section-title mb-0">Recent activity</h3>
+    <p class="bdm-section-subtitle mb-0 text-muted">Most recent audit entries.</p>
+  </div>
+  {% if current_user.role == 'admin' %}
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.audit_logs') }}">View all</a>
+  {% endif %}
+</div>
+{% if recent_logs %}
+  <ul class="bdm-timeline mb-4">
+    {% for l in recent_logs %}
+      <li class="bdm-timeline-item">
+        <div class="bdm-timeline-dot"></div>
+        <time>{{ loghelpers.pretty_time(l.timestamp) }}</time>
+        <h6>{{ l.user.username if l.user else 'System' }} {{ loghelpers.pretty_action(l.action) }}</h6>
+        <p>{{ loghelpers.pretty_entity(l.entity_type, l.entity_id) or '—' }}</p>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <div class="bdm-empty-state mb-4">No activity yet.</div>
+{% endif %}
+
+<script>
+  const chartTextColor = '#5f5555';
+  const chartGridColor = 'rgba(163, 32, 32, 0.08)';
+  const chartPrimary = '#a32020';
+  const chartBlue = '#3ba3e3';
+  const chartGold = '#c59c6c';
+
+  // Gender chart (doughnut)
+  const genderLabels = {{ gender_labels | default([]) | tojson }};
+  const genderData = {{ gender_values | default([]) | tojson }};
+  const genderCtx = document.getElementById('genderChart');
+  if (genderCtx) {
+    new Chart(genderCtx, {
+      type: 'doughnut',
+      data: {
+        labels: genderLabels,
+        datasets: [{
+          data: genderData,
+          backgroundColor: [chartPrimary, chartBlue, chartGold, '#64748b'],
+          borderColor: '#ffffff',
+          borderWidth: 4,
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        cutout: '68%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: chartTextColor, usePointStyle: true, boxWidth: 8 }
+          }
+        },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    });
+  }
+
+    // Documents by type (bar)
+  const docTypeLabels = {{ doc_type_labels | default([]) | tojson }};
+  const docTypeValues = {{ doc_type_values | default([]) | tojson }};
+  const docTypeCtx = document.getElementById('docTypeChart');
+  if (docTypeCtx) {
+    new Chart(docTypeCtx, {
+      type: 'bar',
+      data: {
+        labels: docTypeLabels,
+        datasets: [{
+          data: docTypeValues,
+          backgroundColor: 'rgba(163, 32, 32, 0.72)',
+          borderColor: chartPrimary,
+          borderWidth: 1,
+          borderRadius: 8,
+          maxBarThickness: 54,
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: chartTextColor } },
+          y: { beginAtZero: true, ticks: { precision: 0, color: chartTextColor }, grid: { color: chartGridColor } }
+        },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    });
+  }
+
+// Documents trend (line)
+  const monthLabels = {{ month_labels | default([]) | tojson }};
+  const monthValues = {{ month_values | default([]) | tojson }};
+  const trendCtx = document.getElementById('docsTrendChart');
+  if (trendCtx) {
+    new Chart(trendCtx, {
+      type: 'line',
+      data: {
+        labels: monthLabels,
+        datasets: [{
+          label: 'Documents issued',
+          data: monthValues,
+          tension: 0.35,
+          fill: true,
+          borderColor: chartPrimary,
+          backgroundColor: 'rgba(163, 32, 32, 0.12)',
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: chartPrimary,
+          pointBorderWidth: 2,
+          pointRadius: 4,
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: chartTextColor } },
+          y: { beginAtZero: true, ticks: { precision: 0, color: chartTextColor }, grid: { color: chartGridColor } }
+        },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    });
+  }
+</script>
+{% endblock %}
