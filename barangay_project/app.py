@@ -8,6 +8,8 @@ starts the development server.
 import json
 import logging
 import os
+import shutil
+import sqlite3
 import subprocess
 import threading
 import time
@@ -17,7 +19,7 @@ from datetime import date as dt_date, datetime, timedelta, timezone
 
 import click
 
-from flask import Flask, flash, g, jsonify, redirect, request, session, url_for
+from flask import Flask, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFError
 from flask_login import current_user, logout_user
@@ -25,7 +27,7 @@ from werkzeug.exceptions import HTTPException
 
 from .config import DevelopmentConfig
 from .extensions import csrf, db, login_manager
-from sqlalchemy import inspect, text
+from sqlalchemy import event, inspect, text
 from sqlalchemy.engine import make_url
 
 # Optional: load environment variables from a .env file if present.
@@ -34,10 +36,12 @@ from sqlalchemy.engine import make_url
 try:
     from dotenv import load_dotenv
 except Exception:  # pragma: no cover
+    current_app.logger.exception("Failed to load .env file")
     load_dotenv = None
 from .routes import main_bp
 from .auth import auth_bp
 from .admin import admin_bp
+from .time_utils import format_local_datetime
 
 
 def create_app(config_class=DevelopmentConfig):
@@ -74,6 +78,17 @@ def create_app(config_class=DevelopmentConfig):
     # Initialize extensions
     db.init_app(app)
     Migrate(app, db)
+
+    # Enable WAL mode + foreign keys for SQLite (safe no-op for other backends)
+    with app.app_context():
+        @event.listens_for(db.engine, "connect")
+        def _set_sqlite_pragma(dbapi_connection, connection_record):
+            if isinstance(dbapi_connection, sqlite3.Connection):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.close()
+
     # Enable CSRF protection globally. This allows templates to use
     # `csrf_token()` and enforces CSRF validation on POST/PUT/PATCH/DELETE.
     csrf.init_app(app)
@@ -113,11 +128,28 @@ def create_app(config_class=DevelopmentConfig):
     @app.context_processor
     def inject_pagination_helpers():
         def pagination_url(page: int):
+            endpoint = request.endpoint
+            if not endpoint:
+                return "#"
             args = request.args.to_dict(flat=True)
             args["page"] = page
-            return url_for(request.endpoint, **args)
+            return url_for(endpoint, **args)
 
         return {"pagination_url": pagination_url}
+
+    @app.context_processor
+    def inject_branding():
+        return {
+            "system_name": current_app.config.get("SYSTEM_NAME", "Barangay DMS"),
+            "barangay_name": current_app.config.get("BARANGAY_NAME", "RENZPONSABLENG BARANGAY"),
+            "system_description": current_app.config.get(
+                "SYSTEM_DESCRIPTION", "Barangay Document Management and Archiving System"
+            ),
+            "app_version": current_app.config.get("APP_VERSION", "0.1.0"),
+            "app_author": current_app.config.get("APP_AUTHOR", "Steve Villa"),
+        }
+
+    app.jinja_env.filters["local_datetime"] = format_local_datetime
 
     @app.before_request
     def assign_request_id():
@@ -226,6 +258,7 @@ def create_app(config_class=DevelopmentConfig):
         try:
             db.session.execute(text("SELECT 1"))
         except Exception:
+            current_app.logger.exception("Health check DB query failed")
             db_ok = False
         status = "ok" if db_ok else "degraded"
         code = 200 if db_ok else 503
@@ -257,6 +290,14 @@ def create_app(config_class=DevelopmentConfig):
         # models that have been imported.
         from . import models
 
+        # Ensure SQLite data directory exists before engine connect
+        db_url = make_url(str(app.config.get("SQLALCHEMY_DATABASE_URI") or ""))
+        if "sqlite" in (db_url.drivername or ""):
+            db_path = db_url.database
+            if db_path:
+                abs_path = db_path if os.path.isabs(db_path) else os.path.join(os.getcwd(), db_path)
+                os.makedirs(os.path.dirname(os.path.abspath(abs_path)), exist_ok=True)
+
         # Validate DB connectivity early so failures are clear.
         try:
             db.engine.connect().close()
@@ -281,6 +322,7 @@ def create_app(config_class=DevelopmentConfig):
             try:
                 return {c["name"] for c in insp.get_columns(table)}
             except Exception:
+                current_app.logger.exception("Failed to load table names")
                 return set()
 
         def _exec(sql: str) -> None:
@@ -302,6 +344,7 @@ def create_app(config_class=DevelopmentConfig):
                     db.session.execute(text(sql))
                     db.session.commit()
                 except Exception:
+                    current_app.logger.exception("Schema heal (MySQL path) failed")
                     db.session.rollback()
 
             # --- residents: add missing columns used by the current models ---
@@ -313,6 +356,22 @@ def create_app(config_class=DevelopmentConfig):
                 if "marital_status" not in cols:
                     _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS marital_status VARCHAR(50);")
                     insp = inspect(db.engine)
+                if "contact_number" not in cols:
+                    _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS contact_number VARCHAR(50);")
+                if "occupation" not in cols:
+                    _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS occupation VARCHAR(120);")
+                if "years_on_barangay" not in cols:
+                    _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS years_on_barangay INTEGER;")
+                if "emergency_contact_name" not in cols:
+                    _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS emergency_contact_name VARCHAR(150);")
+                if "emergency_contact_relationship" not in cols:
+                    _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS emergency_contact_relationship VARCHAR(80);")
+                if "emergency_contact_number" not in cols:
+                    _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS emergency_contact_number VARCHAR(50);")
+                if "emergency_contact_address" not in cols:
+                    _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS emergency_contact_address VARCHAR(255);")
+                if "street_id" not in cols:
+                    _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS street_id INTEGER;")
                 if "created_by_id" not in cols:
                     _exec_try("ALTER TABLE residents ADD COLUMN IF NOT EXISTS created_by_id INTEGER;")
                 if "updated_by_id" not in cols:
@@ -368,6 +427,8 @@ def create_app(config_class=DevelopmentConfig):
                     _exec_try("ALTER TABLE document_types ADD COLUMN field_config TEXT;")
                 if "validity_text" not in dt_cols:
                     _exec_try("ALTER TABLE document_types ADD COLUMN validity_text VARCHAR(120);")
+                if "validity_months" not in dt_cols:
+                    _exec_try("ALTER TABLE document_types ADD COLUMN validity_months INTEGER;")
                 if "requires_photo" not in dt_cols:
                     _exec_try("ALTER TABLE document_types ADD COLUMN IF NOT EXISTS requires_photo BOOLEAN NOT NULL DEFAULT FALSE;")
                 insp = inspect(db.engine)
@@ -606,7 +667,7 @@ def create_app(config_class=DevelopmentConfig):
                 _exec_try("CREATE INDEX IF NOT EXISTS ix_documents_resident_id ON documents (resident_id);")
                 _exec_try("CREATE INDEX IF NOT EXISTS ix_documents_document_type_id ON documents (document_type_id);")
 
-        # MySQL/local additive schema fixes. `create_all()` does not add columns
+        # Additive schema fixes for existing databases.  `create_all()` does
         # to existing tables, so keep this generic path before model-based seeding.
         if db.engine.dialect.name != "postgresql":
             def _exec_try_any(sql: str) -> None:
@@ -614,6 +675,7 @@ def create_app(config_class=DevelopmentConfig):
                     db.session.execute(text(sql))
                     db.session.commit()
                 except Exception:
+                    current_app.logger.exception("Schema heal (non-MySQL path) failed")
                     db.session.rollback()
 
             insp = inspect(db.engine)
@@ -626,6 +688,30 @@ def create_app(config_class=DevelopmentConfig):
                 dcols = _colnames("documents")
                 if "field_values" not in dcols:
                     _exec_try_any("ALTER TABLE documents ADD COLUMN field_values TEXT;")
+                insp = inspect(db.engine)
+            if not insp.has_table("barangay_streets"):
+                _exec_try_any(
+                    "CREATE TABLE barangay_streets (id INTEGER PRIMARY KEY, name VARCHAR(120) NOT NULL UNIQUE, created_at DATETIME);"
+                )
+                insp = inspect(db.engine)
+            if insp.has_table("residents"):
+                rcols = _colnames("residents")
+                if "street_id" not in rcols:
+                    _exec_try_any("ALTER TABLE residents ADD COLUMN street_id INTEGER;")
+                if "contact_number" not in rcols:
+                    _exec_try_any("ALTER TABLE residents ADD COLUMN contact_number VARCHAR(50);")
+                if "occupation" not in rcols:
+                    _exec_try_any("ALTER TABLE residents ADD COLUMN occupation VARCHAR(120);")
+                if "years_on_barangay" not in rcols:
+                    _exec_try_any("ALTER TABLE residents ADD COLUMN years_on_barangay INTEGER;")
+                if "emergency_contact_name" not in rcols:
+                    _exec_try_any("ALTER TABLE residents ADD COLUMN emergency_contact_name VARCHAR(150);")
+                if "emergency_contact_relationship" not in rcols:
+                    _exec_try_any("ALTER TABLE residents ADD COLUMN emergency_contact_relationship VARCHAR(80);")
+                if "emergency_contact_number" not in rcols:
+                    _exec_try_any("ALTER TABLE residents ADD COLUMN emergency_contact_number VARCHAR(50);")
+                if "emergency_contact_address" not in rcols:
+                    _exec_try_any("ALTER TABLE residents ADD COLUMN emergency_contact_address VARCHAR(255);")
                 insp = inspect(db.engine)
 
         # Seed common document types (safe to run repeatedly)
@@ -658,6 +744,51 @@ def create_app(config_class=DevelopmentConfig):
                     existing.requires_photo = req_photo
 
             db.session.commit()
+
+            # Auto-activate document types that have a template file
+            inactive_with_template = DocumentType.query.filter(
+                DocumentType.template_path.isnot(None),
+                DocumentType.template_active.is_(False),
+            ).all()
+            for dt in inactive_with_template:
+                dt.template_active = True
+            if inactive_with_template:
+                db.session.commit()
+
+        DEFAULT_STREETS = [
+            "Alonzo Street",
+            "Angeles Street",
+            "B. Baluyot Street",
+            "E. Ramos Street",
+            "Eugenio Street",
+            "I. Francisco Alley",
+            "J. Panganiban Street",
+            "Kabalitang Street",
+            "Lieutenant J. Francisco Street",
+            "M. Dela Cruz Street",
+            "Marilag Street",
+            "P. Fernando Street",
+            "P. Francisco Street",
+            "Plaza Hernandez Street",
+            "Plaza Sta. Ines",
+            "S. Flores Street",
+            "S. Salvador Street",
+            "S. Santos Street",
+            "T. Fulgencio Extension",
+            "T. Fulgencio Street",
+            "Tiburcio Street",
+            "Tiburcio Street Extension",
+            "V. Francisco Street",
+            "V. Gonzales Street",
+            "V. Manansala Street",
+        ]
+
+        if inspect(db.engine).has_table("barangay_streets"):
+            BarangayStreet = models.BarangayStreet
+            for street_name in DEFAULT_STREETS:
+                if not BarangayStreet.query.filter_by(name=street_name).first():
+                    db.session.add(BarangayStreet(name=street_name))
+            db.session.commit()
         # Seed a default admin user if no users exist.
         # Use a raw SQL query to count existing users to keep this resilient
         # against legacy schemas.
@@ -666,11 +797,44 @@ def create_app(config_class=DevelopmentConfig):
             try:
                 user_count = db.session.execute(text("SELECT COUNT(*) FROM users")).scalar()
             except Exception:
+                current_app.logger.exception("Failed to check user count for seed")
                 user_count = None
             if user_count == 0:
                 admin = User(username="admin", role="admin")
                 admin.set_password("admin")
                 db.session.add(admin)
+                db.session.commit()
+
+        # Seed default placeholders if table exists and is empty
+        if insp.has_table("placeholders"):
+            Placeholder = models.Placeholder
+            if Placeholder.query.count() == 0:
+                default_placeholders = [
+                    ("resident_name", "Resident Information"),
+                    ("first_name", "Resident Information"),
+                    ("middle_name", "Resident Information"),
+                    ("last_name", "Resident Information"),
+                    ("address", "Resident Information"),
+                    ("birth_date", "Resident Information"),
+                    ("marital_status", "Resident Information"),
+                    ("emergency_contact_name", "Emergency Contact"),
+                    ("emergency_contact_number", "Emergency Contact"),
+                    ("emergency_contact_relationship", "Emergency Contact"),
+                    ("emergency_contact_address", "Emergency Contact"),
+                    ("document_id", "Document Details"),
+                    ("document_type", "Document Details"),
+                    ("purpose", "Document Details"),
+                    ("issue_date", "Document Details"),
+                    ("author", "Document Details"),
+                    ("validity", "Validity & Expiry"),
+                    ("expiration_date", "Validity & Expiry"),
+                    ("year_on_barangay", "Validity & Expiry"),
+                    ("resident_photo", "Media & Signatures"),
+                    ("qr_code", "Media & Signatures"),
+                    ("captain_name", "Media & Signatures"),
+                ]
+                for name, group in default_placeholders:
+                    db.session.add(Placeholder(name=name, group=group))
                 db.session.commit()
 
     @app.cli.command("init-db")
@@ -681,41 +845,44 @@ def create_app(config_class=DevelopmentConfig):
         """
         with app.app_context():
             db.create_all()
-        print("Database initialized.")
+        click.echo("Database initialized.")
 
     @app.cli.command("backup-db")
     def backup_db_command():
-        """Create a timestamped MySQL/MariaDB SQL backup."""
+        """Create a timestamped database backup."""
         backup_dir = app.config.get("BACKUP_DIR", os.path.join(os.getcwd(), "backups"))
         os.makedirs(backup_dir, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         url = app.config.get("SQLALCHEMY_DATABASE_URI") or ""
         parsed = make_url(url)
-        if not parsed.drivername.startswith("mysql"):
-            print("Only MySQL/MariaDB is supported in this deployment mode.")
-            return
-        if not parsed.database:
-            print("DATABASE_URL must include a database name.")
-            return
 
-        env = os.environ.copy()
-        if parsed.password:
-            env["MYSQL_PWD"] = parsed.password
-
-        dest = os.path.join(backup_dir, f"backup_{ts}.sql")
-        mysqldump_bin = app.config.get("MYSQLDUMP_BIN", "mysqldump")
-        cmd = [
-            mysqldump_bin,
-            f"--host={parsed.host or '127.0.0.1'}",
-            f"--port={parsed.port or 3306}",
-            f"--user={parsed.username or 'root'}",
-            parsed.database,
-            f"--result-file={dest}",
-            "--single-transaction",
-            "--quick",
-        ]
-        subprocess.run(cmd, check=True, env=env)
-        print(f"MySQL backup created: {dest}")
+        if "sqlite" in (parsed.drivername or ""):
+            db_path = parsed.database
+            if not db_path or not os.path.isfile(db_path):
+                click.echo("SQLite database file not found.")
+                return
+            dest = os.path.join(backup_dir, f"backup_{ts}.db")
+            shutil.copy2(db_path, dest)
+            click.echo(f"Database backup created: {dest}")
+        else:
+            if not parsed.drivername.startswith("mysql"):
+                click.echo("Only MySQL/MariaDB is supported in this deployment mode.")
+                return
+            if not parsed.database:
+                click.echo("DATABASE_URL must include a database name.")
+                return
+            args = [
+                f"--host={parsed.host or '127.0.0.1'}",
+                f"--port={parsed.port or 3306}",
+                f"--user={parsed.username or 'root'}",
+            ]
+            if parsed.password:
+                args.append(f"--password={parsed.password}")
+            dest = os.path.join(backup_dir, f"backup_{ts}.sql")
+            mysqldump_bin = app.config.get("MYSQLDUMP_BIN", "mysqldump")
+            cmd = [mysqldump_bin, *args, parsed.database, f"--result-file={dest}", "--single-transaction", "--quick"]
+            subprocess.run(cmd, check=True)
+            click.echo(f"MySQL backup created: {dest}")
 
         # Retention cleanup
         retention_days = int(app.config.get("BACKUP_RETENTION_DAYS", 7))
@@ -732,32 +899,39 @@ def create_app(config_class=DevelopmentConfig):
     def restore_db_command(backup_path: str, yes: bool):
         """Restore database from a backup file."""
         if not yes:
-            print("Refusing to restore without --yes (this will overwrite existing data).")
+            click.echo("Refusing to restore without --yes (this will overwrite existing data).")
             return
 
         url = app.config.get("SQLALCHEMY_DATABASE_URI") or ""
         parsed = make_url(url)
-        if not parsed.drivername.startswith("mysql"):
-            print("Only MySQL/MariaDB is supported in this deployment mode.")
-            return
-        if not parsed.database:
-            print("DATABASE_URL must include a database name.")
-            return
 
-        env = os.environ.copy()
-        if parsed.password:
-            env["MYSQL_PWD"] = parsed.password
-        mysql_bin = app.config.get("MYSQL_BIN", "mysql")
-        cmd = [
-            mysql_bin,
-            f"--host={parsed.host or '127.0.0.1'}",
-            f"--port={parsed.port or 3306}",
-            f"--user={parsed.username or 'root'}",
-            parsed.database,
-        ]
-        with open(backup_path, "rb") as infile:
-            subprocess.run(cmd, check=True, stdin=infile, env=env)
-        print(f"MySQL restored from: {backup_path}")
+        if "sqlite" in (parsed.drivername or ""):
+            db_path = parsed.database
+            if not db_path:
+                click.echo("SQLite database path not found in DATABASE_URL.")
+                return
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            shutil.copy2(backup_path, db_path)
+            click.echo(f"Database restored from: {backup_path}")
+        else:
+            if not parsed.drivername.startswith("mysql"):
+                click.echo("Only MySQL/MariaDB is supported in this deployment mode.")
+                return
+            if not parsed.database:
+                click.echo("DATABASE_URL must include a database name.")
+                return
+            args = [
+                f"--host={parsed.host or '127.0.0.1'}",
+                f"--port={parsed.port or 3306}",
+                f"--user={parsed.username or 'root'}",
+            ]
+            if parsed.password:
+                args.append(f"--password={parsed.password}")
+            mysql_bin = app.config.get("MYSQL_BIN", "mysql")
+            cmd = [mysql_bin, *args, parsed.database]
+            with open(backup_path, "rb") as infile:
+                subprocess.run(cmd, check=True, stdin=infile)
+            click.echo(f"MySQL restored from: {backup_path}")
 
     def _add_months(value: dt_date, months: int) -> dt_date:
         month = value.month - 1 + months
@@ -818,14 +992,16 @@ def create_app(config_class=DevelopmentConfig):
                 doc.updated_at = now
 
         if to_delete:
-            static_root = app.static_folder
+            from .docx_pipeline import resolve_stored_path_to_abs
+
             for doc in to_delete:
                 if doc.file_path:
-                    abs_path = os.path.join(static_root, doc.file_path)
-                    if os.path.exists(abs_path):
+                    abs_path = resolve_stored_path_to_abs(doc.file_path)
+                    if abs_path and abs_path.exists():
                         try:
-                            os.remove(abs_path)
+                            abs_path.unlink()
                         except Exception:
+                            current_app.logger.exception("Failed to delete file in expired doc cleanup")
                             pass
                 db.session.delete(doc)
 
@@ -866,18 +1042,18 @@ def create_app(config_class=DevelopmentConfig):
     def purge_expired_documents(months: int, grace_days: int, dry_run: bool, yes: bool):
         """Archive expired documents, then delete auto-archived ones after a grace period."""
         if not dry_run and not yes:
-            print("Refusing to run without --dry-run or --yes.")
+            click.echo("Refusing to run without --dry-run or --yes.")
             return
 
         result = _process_expired_documents(months=months, grace_days=grace_days, dry_run=dry_run)
-        print(
+        click.echo(
             "Expired documents: archived={archived}, deleted={deleted} (months={months}, grace_days={grace_days})".format(
                 **result
             )
         )
         if dry_run:
             return
-        print("Purge complete.")
+        click.echo("Purge complete.")
 
     def _start_auto_purge_worker() -> None:
         if not app.config.get("AUTO_PURGE_EXPIRED", True):
@@ -917,6 +1093,21 @@ def create_app(config_class=DevelopmentConfig):
     @app.before_request
     def _start_auto_purge_on_first_request() -> None:
         _start_auto_purge_worker()
+
+    # ------------------------------------------------------------------
+    # Custom error pages (404, 403, 500)
+    # ------------------------------------------------------------------
+    @app.errorhandler(404)
+    def not_found(e):
+        return render_template("errors/404.html"), 404
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template("errors/403.html"), 403
+
+    @app.errorhandler(500)
+    def server_error(e):
+        return render_template("errors/500.html"), 500
 
     return app
 

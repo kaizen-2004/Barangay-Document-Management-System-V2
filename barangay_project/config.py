@@ -6,10 +6,9 @@ This module defines different configuration classes for various environments
 environment variables to construct the SQLAlchemy database URI; if a
 `DATABASE_URL` is not provided, a fallback is used.
 
-The project is designed for PostgreSQL but will gracefully fall back to
-SQLite if necessary (e.g., for quick local testing).  To switch between
-databases, set the `DATABASE_URL` environment variable before running
-`flask run`.
+The default database is SQLite (zero-setup, single-file).  To use
+MySQL or PostgreSQL instead, set the `DATABASE_URL` environment variable
+before starting the application.
 """
 import os
 from datetime import timedelta
@@ -19,17 +18,19 @@ class Config:
     """Base configuration with default settings."""
 
     SECRET_KEY = os.environ.get("SECRET_KEY", "a-very-secret-key")
-    # Determine database URL: if DATABASE_URL is provided, use it; otherwise,
-    # default to local MySQL/MariaDB (XAMPP-friendly) for offline LAN deployment.
+    # Default to SQLite for zero-setup deployment.  Override via
+    # DATABASE_URL env var to use MySQL, PostgreSQL, or any SQLAlchemy backend.
+    # For SQLite relative paths, we resolve to an absolute path so that
+    # Flask-SQLAlchemy (which resolves against the instance folder) works
+    # consistently regardless of how the app is started.
+    _SQLITE_DEFAULT = os.path.abspath(os.path.join(os.getcwd(), "data", "barangay.db"))
     DATABASE_URL = os.environ.get(
         "DATABASE_URL",
-        "mysql+pymysql://barangay_user:barangay_password@127.0.0.1:3306/barangay_db?charset=utf8mb4",
+        f"sqlite:///{_SQLITE_DEFAULT}",
     )
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_pre_ping": True,
-        "pool_recycle": 280,
         "pool_size": int(os.environ.get("DB_POOL_SIZE", 10)),
         "max_overflow": int(os.environ.get("DB_MAX_OVERFLOW", 20)),
     }
@@ -46,6 +47,16 @@ class Config:
         os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend', 'static', 'uploads')),
     )
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 5 * 1024 * 1024))  # 5MB
+    ENABLE_CAMERA_CAPTURE = os.environ.get("ENABLE_CAMERA_CAPTURE", "True") == "True"
+    ENABLE_BACKGROUND_REMOVAL = os.environ.get("ENABLE_BACKGROUND_REMOVAL", "True") == "True"
+    ENABLE_ID_PHOTO_PIPELINE = os.environ.get("ENABLE_ID_PHOTO_PIPELINE", "True") == "True"
+    ID_PHOTO_NORMALIZE = os.environ.get("ID_PHOTO_NORMALIZE", "True") == "True"
+    ID_PHOTO_REFINE_ALPHA = os.environ.get("ID_PHOTO_REFINE_ALPHA", "True") == "True"
+    ID_PHOTO_PRESET = os.environ.get("ID_PHOTO_PRESET", "id_photo")
+    ID_PHOTO_MODEL = os.environ.get("ID_PHOTO_MODEL", "birefnet-general")
+    ID_PHOTO_SKIP_NORMALIZE = os.environ.get("ID_PHOTO_SKIP_NORMALIZE", "False") == "True"
+    PROCESSED_PHOTO_WIDTH = int(os.environ.get("PROCESSED_PHOTO_WIDTH", 600))
+    PROCESSED_PHOTO_HEIGHT = int(os.environ.get("PROCESSED_PHOTO_HEIGHT", 600))
 
     # CSRF: keep tokens valid (avoids "token expired" during long admin sessions)
     WTF_CSRF_TIME_LIMIT = None
@@ -91,6 +102,16 @@ class Config:
     PASSWORD_REQUIRE_DIGIT = os.environ.get("PASSWORD_REQUIRE_DIGIT", "True") == "True"
     PASSWORD_REQUIRE_SYMBOL = os.environ.get("PASSWORD_REQUIRE_SYMBOL", "True") == "True"
     PASSWORD_DISALLOW_SPACES = os.environ.get("PASSWORD_DISALLOW_SPACES", "True") == "True"
+
+    # Branding — customize the system name, barangay name, and footer
+    SYSTEM_NAME = os.environ.get("SYSTEM_NAME", "Barangay Management System")
+    BARANGAY_NAME = os.environ.get("BARANGAY_NAME", "Krus Na Ligas")
+    SYSTEM_DESCRIPTION = os.environ.get(
+        "SYSTEM_DESCRIPTION",
+        "Barangay Document Management and Archiving System",
+    )
+    APP_VERSION = os.environ.get("APP_VERSION", "0.1.0")
+    APP_AUTHOR = os.environ.get("APP_AUTHOR", "Steve Villa")
 
     # Login rate limiting (per IP and per username)
     LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("LOGIN_RATE_LIMIT_WINDOW_SECONDS", 600))
@@ -147,5 +168,5 @@ class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "TEST_DATABASE_URL",
-        "mysql+pymysql://root:@127.0.0.1:3306/barangay_test?charset=utf8mb4",
+        "sqlite:///./data/barangay_test.db",
     )

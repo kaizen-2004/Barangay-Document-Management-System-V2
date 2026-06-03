@@ -141,3 +141,20 @@ def change_password():
             flash("Your password has been updated.", "success")
             return redirect(url_for("main.index"))
     return render_template("change_password.html", form=form)
+
+
+@auth_bp.route("/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    form = PasswordChangeForm()
+    if form.validate_on_submit():
+        if not current_user.check_password(form.current_password.data):
+            flash("Incorrect current password.", "danger")
+        else:
+            current_user.set_password(form.new_password.data)
+            db.session.commit()
+            session.pop("force_password_change", None)
+            log_action("Changed password from profile")
+            flash("Password updated.", "success")
+            return redirect(url_for("auth.profile"))
+    return render_template("profile.html", form=form)

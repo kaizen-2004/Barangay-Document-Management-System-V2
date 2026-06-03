@@ -1,8 +1,19 @@
+"""
+DOCX template pipeline.
+
+Handles:
+- Loading and validating DOCX templates against required placeholders.
+- Building a render context from resident / document data.
+- Rendering the template and converting the result to PDF.
+"""
+
 from __future__ import annotations
 
+import io
 import os
 import re
 import subprocess
+import tempfile
 import zipfile
 import json
 from datetime import date
@@ -16,8 +27,11 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from flask import current_app
 from jinja2.exceptions import TemplateSyntaxError
+from PIL import Image
 
 from .extensions import db
+from .image_processing import composite_transparent_on_white, remove_background_to_white
+from .formatting import apply_document_formatting, format_full_address, format_resident_name
 from .models import User
 
 REQUIRED_PLACEHOLDERS = {
@@ -121,6 +135,7 @@ def remove_template_file(rel_template_path: str | None) -> None:
         if abs_path and abs_path.exists() and abs_path.is_file():
             abs_path.unlink()
     except Exception:
+        current_app.logger.exception("Failed to remove old template file")
         return
 
 
@@ -158,6 +173,15 @@ OPTIONAL_PLACEHOLDERS = {
     "validity",
     "author",
     "marital_status",
+    "first_name",
+    "middle_name",
+    "last_name",
+    "validity",
+    "expiration_date",
+    "emergency_contact_name",
+    "emergency_contact_number",
+    "emergency_contact_relationship",
+    "emergency_contact_address",
 }
 
 
@@ -189,12 +213,15 @@ def _resolve_author_name(document) -> str:
     try:
         user = db.session.get(User, user_id)
     except Exception:
+        current_app.logger.exception("Failed to resolve user for document")
         user = None
     return getattr(user, "username", None) or f"User {user_id}"
 
 
 def _compute_year_on_barangay(document, issue_dt: date) -> str:
     resident = document.resident
+    if getattr(resident, "years_on_barangay", None) is not None:
+        return str(resident.years_on_barangay)
     base = getattr(resident, "created_at", None)
     if hasattr(base, "date"):
         base = base.date()
@@ -205,18 +232,44 @@ def _compute_year_on_barangay(document, issue_dt: date) -> str:
 
 
 def _compute_validity(document, issue_dt: date) -> str:
+    months = getattr(document.document_type, "validity_months", None) if document.document_type else None
+    if months:
+        if months == 1:
+            return "1 month"
+        if months == 12:
+            return "1 year"
+        if months < 12:
+            return f"{months} months"
+        years = months // 12
+        remainder = months % 12
+        if remainder == 0:
+            return f"{years} year{'s' if years > 1 else ''}"
+        return f"{years} year{'s' if years > 1 else ''} and {remainder} month{'s' if remainder > 1 else ''}"
+
     custom = (getattr(document.document_type, "validity_text", None) or "").strip() if document.document_type else ""
     if custom:
         return custom
 
     name = ((document.document_type.name if document.document_type else "") or "").lower()
-    if "residency" in name or "residency" in name:
-        return "6 months"
-    if "clearance" in name:
+    if "residency" in name or "clearance" in name:
         return "6 months"
     if "id" in name:
         return "1 year"
     return "As stated by barangay policy"
+
+
+def _compute_expiration(issue_dt: date, months: int | None) -> str:
+    if not months:
+        return ""
+    exp_year = issue_dt.year + (issue_dt.month + months - 1) // 12
+    exp_month = (issue_dt.month + months - 1) % 12 + 1
+    exp_day = min(issue_dt.day, [31, 29 if exp_year % 4 == 0 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][exp_month - 1])
+    from datetime import date
+    try:
+        exp = date(exp_year, exp_month, exp_day)
+    except ValueError:
+        exp = date(exp_year, exp_month, 1)
+    return exp.strftime("%B %d, %Y")
 
 
 def _build_knl_document_id(document, issue_dt: date) -> str:
@@ -256,6 +309,7 @@ def _custom_field_values(document) -> dict[str, str]:
     try:
         parsed = json.loads(getattr(document, "field_values", None) or "{}")
     except Exception:
+        current_app.logger.exception("Failed to load placeholder_config JSON")
         return {}
     if not isinstance(parsed, dict):
         return {}
@@ -266,6 +320,7 @@ def _field_config_names(document_type) -> set[str]:
     try:
         parsed = json.loads(getattr(document_type, "field_config", None) or "{}")
     except Exception:
+        current_app.logger.exception("Failed to load placeholder_config JSON in candidate check")
         return set()
     fields = parsed.get("fields") if isinstance(parsed, dict) else []
     if not isinstance(fields, list):
@@ -273,20 +328,26 @@ def _field_config_names(document_type) -> set[str]:
     return {str(field.get("name", "")).strip() for field in fields if isinstance(field, dict) and str(field.get("name", "")).strip()}
 
 
-def _build_resident_photo_2x2(photo_abs: str, document_id: int) -> str:
+def _build_resident_photo_for_document(photo_abs: str, document_id: int) -> str:
     from PIL import Image
 
-    target = document_output_dir() / f"resident_photo_2x2_{document_id}.png"
-    img = Image.open(photo_abs)
+    target = document_output_dir() / f"resident_photo_doc_{document_id}.png"
+    white_bg_source = document_output_dir() / f"resident_photo_white_{document_id}.png"
+    try:
+        if current_app.config.get("ENABLE_ID_PHOTO_PIPELINE", True):
+            composite_transparent_on_white(photo_abs, str(white_bg_source))
+        else:
+            remove_background_to_white(photo_abs, str(white_bg_source))
+        source_path = white_bg_source
+    except Exception:
+        current_app.logger.exception("Resident photo background processing failed; using existing image.")
+        source_path = Path(photo_abs)
+
+    img = Image.open(source_path)
     if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGB")
 
-    w, h = img.size
-    side = min(w, h)
-    left = (w - side) // 2
-    top = (h - side) // 2
-    square = img.crop((left, top, left + side, top + side)).resize((700, 700))
-    square.save(target)
+    img.save(target, dpi=(300, 300))
     return str(target)
 
 
@@ -296,7 +357,7 @@ def _build_context(document, tpl: DocxTemplate) -> dict:
     if not issue_dt:
         issue_dt = date.today()
 
-    resident_name = " ".join([p for p in [resident.first_name, resident.middle_name, resident.last_name] if p])
+    resident_name = format_resident_name(resident.first_name, resident.middle_name, resident.last_name)
     photo_abs = _relative_static_to_abs(getattr(resident, "photo_path", None))
     knl_document_id = _build_knl_document_id(document, issue_dt)
     qr_abs = _build_qr_image(document, issue_dt, knl_document_id)
@@ -304,15 +365,19 @@ def _build_context(document, tpl: DocxTemplate) -> dict:
     if not photo_abs:
         raise DocumentGenerationError("Resident photo is missing. Capture photo before issuing.")
 
-    resident_photo_for_docx = _build_resident_photo_2x2(photo_abs, document.id)
+    resident_photo_for_docx = _build_resident_photo_for_document(photo_abs, document.id)
     birth_date = resident.birth_date.strftime("%B %d, %Y") if getattr(resident, "birth_date", None) else ""
     author = _resolve_author_name(document)
     year_on_barangay = _compute_year_on_barangay(document, issue_dt)
     validity = _compute_validity(document, issue_dt)
+    expiration_date = _compute_expiration(issue_dt, getattr(document.document_type, "validity_months", None) if document.document_type else None)
 
     context = {
         "resident_name": resident_name,
-        "address": resident.address or "",
+        "first_name": resident.first_name or "",
+        "middle_name": resident.middle_name or "",
+        "last_name": resident.last_name or "",
+        "address": resident.full_address or "",
         "purpose": (document.details or "").strip(),
         "issue_date": issue_dt.strftime("%B %d, %Y"),
         "resident_id": resident.barangay_id or "",
@@ -321,15 +386,20 @@ def _build_context(document, tpl: DocxTemplate) -> dict:
         "captain_name": "",
         "birth_date": birth_date,
         "marital_status": resident.marital_status or "",
+        "emergency_contact_name": resident.emergency_contact_name or "",
+        "emergency_contact_number": resident.emergency_contact_number or "",
+        "emergency_contact_relationship": resident.emergency_contact_relationship or "",
+        "emergency_contact_address": resident.emergency_contact_address or "",
         "author": author,
         "year_on_barangay": year_on_barangay,
         "validity": validity,
-        "resident_photo": InlineImage(tpl, resident_photo_for_docx, width=Mm(50.8), height=Mm(50.8)),
+        "expiration_date": expiration_date,
+        "resident_photo": InlineImage(tpl, resident_photo_for_docx),
         "captain_signature": "",
         "qr_code": InlineImage(tpl, qr_abs, width=Inches(1), height=Inches(1)),
     }
     context.update(_custom_field_values(document))
-    return context
+    return apply_document_formatting(context)
 
 
 def _convert_docx_to_pdf(docx_path: Path) -> Path:
@@ -356,10 +426,9 @@ def _convert_docx_to_pdf(docx_path: Path) -> Path:
     return pdf_path
 
 
-def _enforce_exact_photo_box(docx_path: Path) -> None:
-    """Force resident photo shape to exact 2x2 inches in rendered DOCX."""
+def _normalize_photo_formatting(docx_path: Path) -> None:
+    """Normalize table cell margins and paragraph spacing around photos in rendered DOCX."""
     doc = WordDocument(str(docx_path))
-    target = Inches(2)
 
     def _set_zero_cell_margins(cell) -> None:
         tc = cell._tc
@@ -418,18 +487,65 @@ def _enforce_exact_photo_box(docx_path: Path) -> None:
                     pf.first_line_indent = 0
                     para.alignment = 0
 
-    # Resident photo is rendered at ~50.8mm width. Normalize matching shapes.
-    for shape in doc.inline_shapes:
-        width = int(shape.width)
-        if 1700000 <= width <= 1950000:
-            shape.width = target
-            shape.height = target
-
     # Trim paragraph spacing to reduce visual offset around images.
     for para in doc.paragraphs:
         pf = para.paragraph_format
         pf.space_before = 0
         pf.space_after = 0
+
+    WPS_NS = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+    A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+    def _get_container_width(drawing_elem) -> int | None:
+        r_elem = drawing_elem.getparent()
+        if r_elem is None:
+            return None
+        p_elem = r_elem.getparent()
+        if p_elem is None:
+            return None
+
+        # 1. Table cell container
+        tc_elem = p_elem.getparent()
+        if tc_elem is not None and tc_elem.tag == qn("w:tc"):
+            tc_pr = tc_elem.find(qn("w:tcPr"))
+            if tc_pr is not None:
+                tc_w = tc_pr.find(qn("w:tcW"))
+                if tc_w is not None:
+                    w_val = tc_w.get(qn("w:w"))
+                    w_type = tc_w.get(qn("w:type"))
+                    if w_val and w_type == "dxa":
+                        return int(w_val) * 635
+
+        # 2. Text box container — walk up from paragraph to find shape with dimensions
+        ancestor = p_elem.getparent()
+        for _ in range(20):
+            if ancestor is None:
+                break
+            sp_pr = ancestor.find("{%s}spPr" % WPS_NS)
+            if sp_pr is not None:
+                xfrm = sp_pr.find("{%s}xfrm" % A_NS)
+                if xfrm is not None:
+                    ext = xfrm.find("{%s}ext" % A_NS)
+                    if ext is not None and ext.get("cx"):
+                        return int(ext.get("cx"))
+            ancestor = ancestor.getparent()
+
+        return None
+
+    # Resize shapes inside containers to match container width.
+    for shape in doc.inline_shapes:
+        container_width = _get_container_width(shape._inline)
+        if container_width is None or container_width <= 0:
+            continue
+
+        old_cx = int(shape.width)
+        old_cy = int(shape.height)
+        if old_cx <= 0:
+            continue
+
+        ratio = container_width / old_cx
+        shape.width = container_width
+        shape.height = int(old_cy * ratio)
 
     doc.save(str(docx_path))
 
@@ -453,6 +569,7 @@ def render_document_files(document) -> tuple[str, str]:
                 if normalized:
                     required_placeholders = normalized
         except Exception:
+            current_app.logger.exception("Failed to process placeholder rules")
             pass
 
     validation = validate_template_with_required(
@@ -480,13 +597,122 @@ def render_document_files(document) -> tuple[str, str]:
             f"Details: {exc}"
         ) from exc
     tpl.save(docx_abs)
-    _enforce_exact_photo_box(docx_abs)
+    _normalize_photo_formatting(docx_abs)
 
     pdf_abs = _convert_docx_to_pdf(docx_abs)
 
     docx_rel = str(docx_abs.relative_to(document_output_dir()).as_posix())
     pdf_rel = str(pdf_abs.relative_to(document_output_dir()).as_posix())
     return docx_rel, pdf_rel
+
+
+def preview_document_type_template(doc_type) -> tuple[bytes, str]:
+    """Render a document-type template with dummy data and return (docx_bytes, filename).
+
+    The caller is responsible for passing a ``DocumentType`` instance that has
+    an active, valid template file on disk.
+    """
+    if not doc_type or not doc_type.template_path or not doc_type.template_active:
+        raise DocumentGenerationError("No active template configured for this document type.")
+
+    template_abs = resolve_stored_path_to_abs(doc_type.template_path)
+    if not template_abs:
+        raise DocumentGenerationError("Template file is missing on disk.")
+
+    required_placeholders = set(REQUIRED_PLACEHOLDERS)
+    if getattr(doc_type, "placeholder_config", None):
+        try:
+            parsed = json.loads(doc_type.placeholder_config)
+            custom_required = parsed.get("required") if isinstance(parsed, dict) else None
+            if isinstance(custom_required, list):
+                normalized = {str(x).strip() for x in custom_required if str(x).strip()}
+                if normalized:
+                    required_placeholders = normalized
+        except Exception:
+            current_app.logger.exception("Failed to parse placeholder_config for preview")
+            pass
+
+    field_names = _field_config_names(doc_type)
+    validation = validate_template_with_required(str(template_abs), required_placeholders, extra_allowed=field_names)
+    if validation["missing"]:
+        raise DocumentGenerationError(
+            "Template is missing required placeholders: " + ", ".join(validation["missing"])
+        )
+
+    tpl = DocxTemplate(str(template_abs))
+
+    # Build dummy context ----------------------------------------------------
+    dummy_context = {
+        "resident_name": "Juan B. Dela Cruz",
+        "first_name": "Juan",
+        "middle_name": "B.",
+        "last_name": "Dela Cruz",
+        "address": "123 Rizal St., Barangay Poblacion, Sample City",
+        "purpose": "Sample Document Purpose",
+        "issue_date": "January 15, 2025",
+        "resident_id": "KNL-2025-00001",
+        "document_id": "KNL-2025-00001-001",
+        "document_type": doc_type.name or "Sample Document Type",
+        "captain_name": "Capt. Juan A. Santos",
+        "birth_date": "March 20, 1990",
+        "marital_status": "Married",
+        "emergency_contact_name": "Maria C. Dela Cruz",
+        "emergency_contact_number": "0917 123 4567",
+        "emergency_contact_relationship": "Spouse",
+        "emergency_contact_address": "123 Rizal St., Barangay Poblacion, Sample City",
+        "author": "Admin User",
+        "year_on_barangay": "5 years",
+        "validity": "Valid for 6 months",
+        "expiration_date": "July 15, 2025",
+        "captain_signature": "",
+    }
+
+    # Generate placeholder images for resident_photo and qr_code ------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        placeholder_img = _make_placeholder_image(tmpdir, "PHOTO", (240, 280))
+        qr_img = _make_placeholder_image(tmpdir, "QR", (200, 200))
+        dummy_context["resident_photo"] = InlineImage(tpl, placeholder_img, width=Mm(25), height=Mm(30))
+        dummy_context["qr_code"] = InlineImage(tpl, qr_img, width=Inches(1), height=Inches(1))
+
+        # Custom fields from field_config
+        if getattr(doc_type, "field_config", None):
+            try:
+                fc = json.loads(doc_type.field_config)
+                fields = fc.get("fields", []) if isinstance(fc, dict) else []
+                n = 1
+                for f in fields:
+                    key = f.get("name", f"field_{n}")
+                    dummy_context[key] = f"[{f.get('label', key)}]"
+                    n += 1
+            except Exception:
+                current_app.logger.exception("Failed to parse field_config for preview")
+                pass
+
+        docx_bytes = io.BytesIO()
+        try:
+            tpl.render(dummy_context)
+        except TemplateSyntaxError as exc:
+            raise DocumentGenerationError(
+                "Template syntax error. Use placeholders like {{ resident_name }} only. "
+                f"Details: {exc}"
+            ) from exc
+        tpl.save(docx_bytes)
+        docx_bytes.seek(0)
+        slug = re.sub(r"[^a-z0-9]+", "-", (doc_type.name or "preview").lower()).strip("-")
+        return docx_bytes.getvalue(), f"{slug}-preview.docx"
+
+
+def _make_placeholder_image(directory: str, text: str, size: tuple[int, int]) -> str:
+    """Create a small gray placeholder PNG with centered text."""
+    path = os.path.join(directory, f"placeholder_{text.lower()}.png")
+    img = Image.new("RGB", size, (200, 200, 200))
+    from PIL import ImageDraw
+    draw = ImageDraw.Draw(img)
+    bbox = draw.textbbox((0, 0), text)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text(((size[0] - tw) / 2, (size[1] - th) / 2), text, fill=(120, 120, 120))
+    img.save(path)
+    return path
 
 
 def libreoffice_diagnostics() -> tuple[bool, str]:

@@ -10,7 +10,7 @@ import re
 from flask import current_app
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
-from wtforms import StringField, DateField, SelectField, TextAreaField, SubmitField, HiddenField
+from wtforms import StringField, DateField, SelectField, TextAreaField, SubmitField, HiddenField, IntegerField
 from wtforms import PasswordField, BooleanField
 from wtforms.validators import DataRequired, Optional, EqualTo, Length, ValidationError
 
@@ -70,7 +70,21 @@ class ResidentForm(FlaskForm):
         ],
         validators=[DataRequired()],
     )
-    address = StringField("Address", validators=[DataRequired()])
+    contact_number = StringField("Contact Number", validators=[Optional(), Length(max=50)])
+    occupation = StringField("Occupation", validators=[Optional(), Length(max=120)])
+    years_on_barangay = StringField("Years in Barangay", validators=[Optional(), Length(max=10)])
+    emergency_contact_name = StringField("Emergency Contact Person", validators=[Optional(), Length(max=150)])
+    emergency_contact_relationship = StringField("Relationship", validators=[Optional(), Length(max=80)])
+    emergency_contact_number = StringField("Emergency Contact Number", validators=[Optional(), Length(max=50)])
+    emergency_contact_address = StringField("Emergency Contact Address", validators=[Optional(), Length(max=255)])
+    emergency_contact_same_address = BooleanField("Same address as resident")
+    street_id = SelectField("Street", coerce=int, validators=[DataRequired()])
+    address = StringField("House No. / Address Details", validators=[DataRequired()])
+    submit = SubmitField("Save")
+
+
+class BarangayStreetForm(FlaskForm):
+    name = StringField("Street / Road Name", validators=[DataRequired(), Length(max=120)])
     submit = SubmitField("Save")
 
 
@@ -94,7 +108,7 @@ class DocumentTypeForm(FlaskForm):
     template_active = BooleanField("Template Active")
     placeholder_config = TextAreaField("Placeholder Config (JSON)", validators=[Optional()])
     field_config = TextAreaField("Fill-out Fields (JSON)", validators=[Optional()])
-    validity_text = StringField("Validity Text", validators=[Optional(), Length(max=120)])
+    validity_months = IntegerField("Validity (months)", validators=[Optional()], render_kw={"min": 1, "placeholder": "e.g. 6 or 12"})
     submit = SubmitField("Save")
 
 

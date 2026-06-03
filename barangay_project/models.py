@@ -14,6 +14,19 @@ from .extensions import db
 from .time_utils import utcnow
 
 
+class BarangayStreet(db.Model):
+    __tablename__ = "barangay_streets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, default=utcnow)
+
+    residents = db.relationship("Resident", back_populates="street")
+
+    def __repr__(self):
+        return f"<BarangayStreet {self.name}>"
+
+
 class Resident(db.Model):
     """
     Represents a resident in the barangay.  A resident may have multiple
@@ -25,6 +38,9 @@ class Resident(db.Model):
     __table_args__ = (
         db.Index("ix_residents_last_name", "last_name"),
         db.Index("ix_residents_barangay_id", "barangay_id"),
+        db.Index("ix_residents_created_at", "created_at"),
+        db.Index("ix_residents_is_archived", "is_archived"),
+        db.UniqueConstraint("first_name", "last_name", "birth_date", name="uq_resident_name_birth"),
     )
     id = db.Column(db.Integer, primary_key=True)
     # Human-friendly identifier for the resident (optional but useful for
@@ -37,6 +53,14 @@ class Resident(db.Model):
     gender = db.Column(db.String(10), nullable=False)
     birth_date = db.Column(db.Date, nullable=False)
     marital_status = db.Column(db.String(50), nullable=True)
+    contact_number = db.Column(db.String(50), nullable=True)
+    occupation = db.Column(db.String(120), nullable=True)
+    years_on_barangay = db.Column(db.Integer, nullable=True)
+    emergency_contact_name = db.Column(db.String(150), nullable=True)
+    emergency_contact_relationship = db.Column(db.String(80), nullable=True)
+    emergency_contact_number = db.Column(db.String(50), nullable=True)
+    emergency_contact_address = db.Column(db.String(255), nullable=True)
+    street_id = db.Column(db.Integer, db.ForeignKey("barangay_streets.id"), nullable=True)
     address = db.Column(db.String(255), nullable=False)
     photo_path = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow)
@@ -53,9 +77,15 @@ class Resident(db.Model):
         back_populates="resident",
         cascade="all, delete-orphan",
     )
+    street = db.relationship("BarangayStreet", back_populates="residents")
 
     def __repr__(self):
         return f"<Resident {self.last_name}, {self.first_name}>"
+
+    @property
+    def full_address(self) -> str:
+        from .formatting import format_full_address
+        return format_full_address(self.address, self.street.name if self.street else None)
 
 
 class DocumentType(db.Model):
@@ -78,6 +108,7 @@ class DocumentType(db.Model):
     placeholder_config = db.Column(db.Text, nullable=True)
     field_config = db.Column(db.Text, nullable=True)
     validity_text = db.Column(db.String(120), nullable=True)
+    validity_months = db.Column(db.Integer, nullable=True)
     requires_photo = db.Column(db.Boolean, nullable=False, default=False, server_default=text("0"))
 
     documents = db.relationship(
@@ -102,6 +133,8 @@ class Document(db.Model):
         db.Index("ix_documents_issue_date", "issue_date"),
         db.Index("ix_documents_resident_id", "resident_id"),
         db.Index("ix_documents_document_type_id", "document_type_id"),
+        db.Index("ix_documents_status", "status"),
+        db.Index("ix_documents_is_archived", "is_archived"),
     )
     id = db.Column(db.Integer, primary_key=True)
     resident_id = db.Column(db.Integer, db.ForeignKey("residents.id"), nullable=False)
@@ -180,6 +213,11 @@ class TransactionLog(db.Model):
     """
 
     __tablename__ = "transaction_logs"
+    __table_args__ = (
+        db.Index("ix_transaction_logs_timestamp", "timestamp"),
+        db.Index("ix_transaction_logs_user_id", "user_id"),
+        db.Index("ix_transaction_logs_entity", "entity_type", "entity_id"),
+    )
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     action = db.Column(db.String(255), nullable=False)
@@ -225,3 +263,14 @@ class Official(db.Model):
 
     def __repr__(self):
         return f"<Official {self.full_name} ({self.title})>"
+
+
+class Placeholder(db.Model):
+    __tablename__ = "placeholders"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    group = db.Column(db.String(50), nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<Placeholder {self.name}>"

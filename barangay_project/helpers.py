@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import os
 import re
+import shutil
 import uuid
 from functools import wraps
 
@@ -19,6 +20,12 @@ from flask_login import current_user
 from werkzeug.utils import secure_filename
 
 from .extensions import db
+from .image_processing import (
+    composite_transparent_on_white,
+    generate_transparent_png,
+    process_captured_person_photo,
+    remove_background_to_white,
+)
 from .models import TransactionLog
 
 
@@ -56,10 +63,12 @@ def get_client_ip() -> str | None:
         if forwarded:
             return forwarded.split(",")[0].strip() or None
     except Exception:
+        current_app.logger.exception("Failed to get client IP from X-Forwarded-For")
         return None
     try:
         return request.remote_addr
     except Exception:
+        current_app.logger.exception("Failed to get client IP from request.remote_addr")
         return None
 
 
@@ -87,6 +96,7 @@ def log_action(
             try:
                 ua = (request.user_agent.string or "")[:255]
             except Exception:
+                current_app.logger.exception("Failed to parse User-Agent")
                 ua = None
 
         log = TransactionLog(
@@ -103,6 +113,198 @@ def log_action(
 
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
+CAPTURE_PHOTO_PREFIXES = ("uploads/photos/original/", "uploads/photos/processed/")
+
+
+def _save_processed_white_background(abs_path: str, upload_root: str, subfolder: str, unique_stem: str) -> str:
+    processed_dir = os.path.join(upload_root, "processed", subfolder)
+    processed_name = f"{unique_stem}.png"
+    processed_abs = os.path.join(processed_dir, processed_name)
+
+    if current_app.config.get("ENABLE_ID_PHOTO_PIPELINE", True):
+        generate_transparent_png(abs_path, processed_abs, preset="id_photo")
+    else:
+        remove_background_to_white(abs_path, processed_abs)
+    return f"uploads/processed/{subfolder}/{processed_name}"
+
+
+def is_processed_photo_path(value: str | None) -> bool:
+    return bool(value and str(value).startswith("uploads/photos/processed/"))
+
+
+def is_static_upload_path(value: str | None) -> bool:
+    return bool(value and str(value).strip().lstrip("/").startswith("uploads/"))
+
+
+def promote_capture_photo_to_resident(path: str | None) -> str | None:
+    """Copy a temporary processed capture into permanent resident storage."""
+    rel = str(path or "").strip().lstrip("/")
+    if not rel:
+        return None
+    if not rel.startswith("uploads/photos/processed/"):
+        return rel
+
+    upload_root = current_app.config.get(
+        "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
+    )
+    static_root = os.path.dirname(upload_root)
+    source_abs = os.path.abspath(os.path.join(static_root, rel))
+    allowed_root = os.path.abspath(os.path.join(upload_root, "photos", "processed"))
+    if not source_abs.startswith(allowed_root + os.sep) or not os.path.isfile(source_abs):
+        current_app.logger.warning("promote_capture_photo_to_resident: source file missing: %s", source_abs)
+        return None
+
+    target_dir = os.path.join(upload_root, "processed", "residents")
+    os.makedirs(target_dir, exist_ok=True)
+    target_name = f"{uuid.uuid4().hex}.png"
+    target_abs = os.path.join(target_dir, target_name)
+    shutil.copy2(source_abs, target_abs)
+    return f"uploads/processed/residents/{target_name}"
+
+
+def save_or_keep_resident_photo(value: str | None) -> str | None:
+    """Persist a photo form value, whether it is a data URL or saved static path."""
+    if not value:
+        return None
+    if is_static_upload_path(value):
+        return promote_capture_photo_to_resident(value)
+    return save_captured_image(value, "residents")
+
+
+def delete_capture_photo_paths(paths: list[str]) -> int:
+    """Delete temporary capture files under uploads/photos only."""
+    upload_root = current_app.config.get(
+        "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
+    )
+    static_root = os.path.dirname(upload_root)
+    deleted = 0
+    for path in paths:
+        rel = str(path or "").strip().lstrip("/")
+        if not rel.startswith(CAPTURE_PHOTO_PREFIXES):
+            continue
+        abs_path = os.path.abspath(os.path.join(static_root, rel))
+        allowed_root = os.path.abspath(os.path.join(upload_root, "photos"))
+        if not abs_path.startswith(allowed_root + os.sep):
+            continue
+        try:
+            if os.path.isfile(abs_path):
+                os.remove(abs_path)
+                deleted += 1
+        except Exception:
+            current_app.logger.exception("Failed to delete temporary capture image: %s", rel)
+    return deleted
+
+
+def save_camera_capture_for_processing(data_url: str | None, *, level: int = 2, **kwargs) -> dict | None:
+    """Save a camera image, process it, and return original/processed static paths."""
+    if not data_url:
+        return None
+
+    m = _DATA_URL_RE.match(data_url.strip())
+    if not m:
+        return None
+
+    ext = m.group("ext").lower()
+    if ext == "jpeg":
+        ext = "jpg"
+
+    try:
+        raw = base64.b64decode(m.group("data"), validate=True)
+    except Exception:
+        current_app.logger.exception("Failed to decode base64 image data")
+        return None
+
+    upload_root = current_app.config.get(
+        "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
+    )
+    unique_stem = uuid.uuid4().hex
+    original_dir = os.path.join(upload_root, "photos", "original")
+    processed_dir = os.path.join(upload_root, "processed", "residents")
+    os.makedirs(original_dir, exist_ok=True)
+    os.makedirs(processed_dir, exist_ok=True)
+
+    original_name = f"{unique_stem}.{ext}"
+    processed_name = f"{unique_stem}.png"
+    original_abs = os.path.join(original_dir, original_name)
+    processed_abs = os.path.join(processed_dir, processed_name)
+
+    with open(original_abs, "wb") as f:
+        f.write(raw)
+
+    warning = None
+    try:
+        _, warning = process_captured_person_photo(original_abs, processed_abs, level=level)
+    except Exception as exc:
+        current_app.logger.exception("Camera photo processing failed; preserving original image.")
+        warning = "Photo processing failed. Original captured image was preserved."
+        if os.path.isfile(original_abs):
+            shutil.copy2(original_abs, processed_abs)
+
+    processed_rel = f"uploads/processed/residents/{processed_name}"
+    return {
+        "original_path": f"uploads/photos/original/{original_name}",
+        "processed_path": processed_rel,
+        "warning": warning,
+    }
+
+
+def reprocess_captured_photo(
+    data_url: str | None,
+    original_rel: str,
+    processed_rel: str,
+    level: int = 2,
+) -> dict | None:
+    """Re-process an existing camera capture, overwriting the previous result.
+
+    Unlike ``save_camera_capture_for_processing`` which creates new unique
+    files each time, this function overwrites the given original and
+    processed files in place.  Useful when the user wants to re-run
+    background removal on the same capture (e.g. with adjusted crop/zoom)
+    without accumulating duplicate images.
+    """
+    if not data_url or not original_rel or not processed_rel:
+        return None
+
+    m = _DATA_URL_RE.match(data_url.strip())
+    if not m:
+        return None
+
+    try:
+        raw = base64.b64decode(m.group("data"), validate=True)
+    except Exception:
+        current_app.logger.exception("Failed to decode base64 image data in reprocess")
+        return None
+
+    upload_root = current_app.config.get(
+        "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
+    )
+    static_root = os.path.dirname(upload_root)
+    original_abs = os.path.abspath(os.path.join(static_root, original_rel))
+    processed_abs = os.path.abspath(os.path.join(static_root, processed_rel))
+
+    photos_root = os.path.abspath(os.path.join(upload_root, "photos"))
+    processed_root = os.path.abspath(os.path.join(upload_root, "processed"))
+    if not original_abs.startswith(photos_root + os.sep):
+        return None
+    if not processed_abs.startswith(photos_root + os.sep) and not processed_abs.startswith(processed_root + os.sep):
+        return None
+
+    os.makedirs(os.path.dirname(original_abs), exist_ok=True)
+    with open(original_abs, "wb") as f:
+        f.write(raw)
+
+    warning = None
+    try:
+        _, warning = process_captured_person_photo(original_abs, processed_abs, level=level)
+    except Exception:
+        current_app.logger.exception("Camera photo re-processing failed; preserving previous processed image.")
+        warning = "Re-processing failed. Previous processed image was preserved."
+
+    return {
+        "original_path": original_rel,
+        "processed_path": processed_rel,
+        "warning": warning,
+    }
 
 
 def save_uploaded_image(file_storage, subfolder: str) -> str | None:
@@ -124,15 +326,23 @@ def save_uploaded_image(file_storage, subfolder: str) -> str | None:
     upload_root = current_app.config.get(
         "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
     )
-    target_dir = os.path.join(upload_root, subfolder)
+    target_dir = os.path.join(upload_root, "original", subfolder)
     os.makedirs(target_dir, exist_ok=True)
 
-    unique_name = f"{uuid.uuid4().hex}.{ext}"
+    unique_stem = uuid.uuid4().hex
+    unique_name = f"{unique_stem}.{ext}"
     abs_path = os.path.join(target_dir, unique_name)
     file_storage.save(abs_path)
 
-    # Store path relative to /static for easy url_for('static', filename=...)
-    return f"uploads/{subfolder}/{unique_name}"
+    try:
+        processed_dir = os.path.join(upload_root, "processed", subfolder)
+        processed_name = f"{unique_stem}.png"
+        processed_abs = os.path.join(processed_dir, processed_name)
+        process_captured_person_photo(abs_path, processed_abs)
+        return f"uploads/processed/{subfolder}/{processed_name}"
+    except Exception:
+        current_app.logger.exception("Image background processing failed; using original image.")
+        return f"uploads/original/{subfolder}/{unique_name}"
 
 
 _DATA_URL_RE = re.compile(r"^data:image/(?P<ext>png|jpeg|jpg);base64,(?P<data>.+)$")
@@ -158,17 +368,23 @@ def save_captured_image(data_url: str | None, subfolder: str) -> str | None:
     try:
         raw = base64.b64decode(m.group("data"), validate=True)
     except Exception:
+        current_app.logger.exception("Failed to decode base64 image data in save_or_keep")
         return None
 
     upload_root = current_app.config.get(
         "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
     )
-    target_dir = os.path.join(upload_root, subfolder)
+    target_dir = os.path.join(upload_root, "original", subfolder)
     os.makedirs(target_dir, exist_ok=True)
 
-    unique_name = f"{uuid.uuid4().hex}.{ext}"
+    unique_stem = uuid.uuid4().hex
+    unique_name = f"{unique_stem}.{ext}"
     abs_path = os.path.join(target_dir, unique_name)
     with open(abs_path, "wb") as f:
         f.write(raw)
 
-    return f"uploads/{subfolder}/{unique_name}"
+    try:
+        return _save_processed_white_background(abs_path, upload_root, subfolder, unique_stem)
+    except Exception:
+        current_app.logger.exception("Image background processing failed; using original image.")
+        return f"uploads/original/{subfolder}/{unique_name}"
