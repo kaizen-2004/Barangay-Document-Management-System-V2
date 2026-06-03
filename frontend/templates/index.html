@@ -4,10 +4,14 @@
 {% block content %}
 {% import "_log_helpers.html" as loghelpers %}
 
+<script>
+  document.write(`<style>.greeting-text::after{content:"Good day"}</style>`);
+</script>
+
   {# Hero welcome panel #}
   <div class="bdm-hero-card bdm-fade-in">
     <div>
-      <h1>Welcome back, {{ current_user.username }}</h1>
+      <h1><span class="greeting-text"></span>, {{ current_user.username }}</h1>
       <p>Manage residents, documents and reports from your personalized dashboard.</p>
     </div>
     <div class="bdm-hero-meta" aria-label="Dashboard highlights">
@@ -20,34 +24,32 @@
   {# Quick action cards grid #}
   <div class="bdm-quick-actions bdm-fade-in">
     <a class="bdm-action-card" href="{{ url_for('main.add_resident') }}">
-      <div>
-        <div class="action-title">Add Resident</div>
-        <div class="action-desc">Create a new resident record</div>
-      </div>
+      <span class="bdm-action-icon" style="background:#fce4e4;color:#7f1d1d;"><i class="fas fa-user-plus"></i></span>
+      <span class="action-title">Add Resident</span>
+      <span class="action-desc">Create a new resident record</span>
     </a>
     <a class="bdm-action-card" href="{{ url_for('main.issue_document') }}">
-      <div>
-        <div class="action-title">Create Draft</div>
-        <div class="action-desc">Start a new document draft</div>
-      </div>
+      <span class="bdm-action-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-file-pen"></i></span>
+      <span class="action-title">Create Draft</span>
+      <span class="action-desc">Start a new document draft</span>
     </a>
     <a class="bdm-action-card" href="{{ url_for('main.global_search') }}">
-      <div>
-        <div class="action-title">Search Records</div>
-        <div class="action-desc">Find residents or documents</div>
-      </div>
+      <span class="bdm-action-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-magnifying-glass"></i></span>
+      <span class="action-title">Search Records</span>
+      <span class="action-desc">Find residents or documents</span>
     </a>
     <a class="bdm-action-card" href="{{ url_for('main.reports') }}">
-      <div>
-        <div class="action-title">View Reports</div>
-        <div class="action-desc">Explore analytics</div>
-      </div>
+      <span class="bdm-action-icon" style="background:#e0e7ff;color:#3730a3;"><i class="fas fa-chart-bar"></i></span>
+      <span class="action-title">View Reports</span>
+      <span class="action-desc">Explore analytics</span>
     </a>
   </div>
 
+  {# Metric cards row #}
   <div class="row g-3 mb-4">
     <div class="col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <span class="bdm-action-icon" style="background:#fce4e4;color:#7f1d1d;"><i class="fas fa-users"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Active Residents</div>
           <div class="h2 fw-semibold mb-0">{{ resident_count }}</div>
@@ -58,6 +60,7 @@
     </div>
     <div class="col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <span class="bdm-action-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-file-lines"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Issued Documents</div>
           <div class="h2 fw-semibold mb-0">{{ document_count }}</div>
@@ -68,6 +71,7 @@
     </div>
     <div class="col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <span class="bdm-action-icon" style="background:#e0e7ff;color:#3730a3;"><i class="fas fa-calendar-check"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">This month</div>
           <div class="h2 fw-semibold mb-0">{{ documents_this_month }}</div>
@@ -78,6 +82,7 @@
     </div>
     <div class="col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <span class="bdm-action-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-pen"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Drafts</div>
           <div class="h2 fw-semibold mb-0">{{ draft_document_count }}</div>
@@ -88,6 +93,7 @@
     </div>
     <div class="col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+        <span class="bdm-action-icon" style="background:#f1f5f9;color:#475569;"><i class="fas fa-archive"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Archived</div>
           <div class="h2 fw-semibold mb-0">{{ archived_resident_count + archived_document_count }}</div>
@@ -98,88 +104,211 @@
     </div>
   </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-lg-4">
-    <div class="bdm-chart-card h-100">
-      <div class="card-header bg-transparent">
-        <div class="fw-semibold">Residents by gender</div>
-        <div class="text-muted small">Quick distribution of profiles.</div>
-      </div>
-      <div class="card-body bdm-chart-body">
-        <canvas id="genderChart"></canvas>
+  {# Expiring documents alert #}
+  {% if expiring_docs %}
+  <div class="row g-3 mb-4">
+    <div class="col-12">
+      <div class="bdm-chart-card">
+        <div class="card-header bg-transparent d-flex align-items-center gap-2" style="border-left: 4px solid var(--bdm-accent);">
+          <i class="fas fa-triangle-exclamation text-warning"></i>
+          <span class="fw-semibold">Documents expiring within 30 days</span>
+          <span class="badge bg-warning text-dark ms-auto">{{ expiring_count }}</span>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Resident</th>
+                  <th>Document</th>
+                  <th>Expiry</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for doc in expiring_docs[:5] %}
+                <tr>
+                  <td>{{ doc.resident_name }}</td>
+                  <td>{{ doc.doc_type }}</td>
+                  <td>{{ doc.expiry_date.strftime('%b %d, %Y') }}</td>
+                  <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.issue_document', resident_id=doc.resident_id) }}">Renew</a></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-
-  <div class="col-lg-4">
-    <div class="bdm-chart-card h-100">
-      <div class="card-header bg-transparent">
-        <div class="fw-semibold">Documents by type</div>
-        <div class="text-muted small">Top issued document types.</div>
-      </div>
-      <div class="card-body bdm-chart-body">
-        <canvas id="docTypeChart"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-lg-4">
-    <div class="bdm-chart-card h-100">
-      <div class="card-header bg-transparent">
-        <div class="fw-semibold">Documents trend</div>
-        <div class="text-muted small">Issued documents (last 6 months).</div>
-      </div>
-      <div class="card-body bdm-chart-body">
-        <canvas id="docsTrendChart"></canvas>
-      </div>
-    </div>
-  </div>
-</div>
-
-{# Recent activity section as a timeline #}
-<div class="bdm-section-header d-flex justify-content-between align-items-center mb-2">
-  <div>
-    <h3 class="bdm-section-title mb-0">Recent activity</h3>
-    <p class="bdm-section-subtitle mb-0 text-muted">Most recent audit entries.</p>
-  </div>
-  {% if current_user.role == 'admin' %}
-    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.audit_logs') }}">View all</a>
   {% endif %}
-</div>
-{% if recent_logs %}
-  <ul class="bdm-timeline mb-4">
-    {% for l in recent_logs %}
-      <li class="bdm-timeline-item">
-        <div class="bdm-timeline-dot"></div>
-        <time>{{ loghelpers.pretty_time(l.timestamp) }}</time>
-        <h6>{{ l.user.username if l.user else 'System' }} {{ loghelpers.pretty_action(l.action) }}</h6>
-        <p>{{ loghelpers.pretty_entity(l.entity_type, l.entity_id) or '—' }}</p>
-      </li>
-    {% endfor %}
-  </ul>
-{% else %}
-  <div class="bdm-empty-state mb-4">No activity yet.</div>
-{% endif %}
+
+  {# Upcoming birthdays #}
+  {% if upcoming_birthdays %}
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="bdm-chart-card h-100">
+        <div class="card-header bg-transparent d-flex align-items-center gap-2">
+          <i class="fas fa-cake-candles text-primary"></i>
+          <span class="fw-semibold">Upcoming Birthdays</span>
+          <span class="badge bg-primary ms-auto">{{ upcoming_birthdays|length }}</span>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Resident</th>
+                  <th>Age</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for b in upcoming_birthdays %}
+                <tr>
+                  <td><a href="{{ url_for('main.resident_profile', resident_id=b.id) }}" class="text-decoration-none">{{ b.name }}</a></td>
+                  <td>{{ b.age }}</td>
+                  <td>{{ b.bday_date.strftime('%b %d') }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# Charts row 1 #}
+  <div class="row g-3 mb-4">
+    <div class="col-lg-4">
+      <div class="bdm-chart-card h-100">
+        <div class="card-header bg-transparent">
+          <div class="fw-semibold"><i class="fas fa-venus-mars me-1"></i> Residents by gender</div>
+          <div class="text-muted small">Distribution of profiles.</div>
+        </div>
+        <div class="card-body bdm-chart-body">
+          <canvas id="genderChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="bdm-chart-card h-100">
+        <div class="card-header bg-transparent">
+          <div class="fw-semibold"><i class="fas fa-tasks me-1"></i> Document status</div>
+          <div class="text-muted small">Issued vs draft vs archived.</div>
+        </div>
+        <div class="card-body bdm-chart-body">
+          <canvas id="statusChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="bdm-chart-card h-100">
+        <div class="card-header bg-transparent">
+          <div class="fw-semibold"><i class="fas fa-file-lines me-1"></i> Documents by type</div>
+          <div class="text-muted small">Most issued document types.</div>
+        </div>
+        <div class="card-body bdm-chart-body">
+          <canvas id="docTypeChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Charts row 2 - trends #}
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="bdm-chart-card h-100">
+        <div class="card-header bg-transparent">
+          <div class="fw-semibold"><i class="fas fa-chart-line me-1"></i> Documents trend</div>
+          <div class="text-muted small">Issued per month (last 6).</div>
+        </div>
+        <div class="card-body bdm-chart-body">
+          <canvas id="docsTrendChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="bdm-chart-card h-100">
+        <div class="card-header bg-transparent">
+          <div class="fw-semibold"><i class="fas fa-user-plus me-1"></i> Resident signups</div>
+          <div class="text-muted small">New residents per month (last 6).</div>
+        </div>
+        <div class="card-body bdm-chart-body">
+          <canvas id="residentTrendChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Street chart #}
+  <div class="row g-3 mb-4">
+    <div class="col-12">
+      <div class="bdm-chart-card">
+        <div class="card-header bg-transparent">
+          <div class="fw-semibold"><i class="fas fa-road me-1"></i> Residents by street</div>
+          <div class="text-muted small">Top 10 streets by resident count.</div>
+        </div>
+        <div class="card-body bdm-chart-body bdm-chart-body-tall">
+          <canvas id="streetChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Recent activity timeline #}
+  <div class="bdm-section-header d-flex justify-content-between align-items-center mb-2">
+    <div>
+      <h3 class="bdm-section-title mb-0"><i class="fas fa-clock me-1"></i> Recent activity</h3>
+      <p class="bdm-section-subtitle mb-0 text-muted">Latest audit entries.</p>
+    </div>
+    {% if current_user.role == 'admin' %}
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.audit_logs') }}">View all</a>
+    {% endif %}
+  </div>
+  {% if recent_logs %}
+    <ul class="bdm-timeline mb-4">
+      {% for l in recent_logs %}
+        <li class="bdm-timeline-item">
+          <div class="bdm-timeline-dot"></div>
+          <time>{{ loghelpers.pretty_time(l.timestamp) }}</time>
+          <h6>{{ l.user.username if l.user else 'System' }} {{ loghelpers.pretty_action(l.action) }}</h6>
+          <p>{{ loghelpers.pretty_entity(l.entity_type, l.entity_id) or '—' }}</p>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="bdm-empty-state-icon mb-4"><i class="fas fa-clock"></i><span>No activity yet.</span></div>
+  {% endif %}
 
 <script>
-  const chartTextColor = '#5f5555';
-  const chartGridColor = 'rgba(163, 32, 32, 0.08)';
-  const chartPrimary = '#a32020';
-  const chartBlue = '#3ba3e3';
-  const chartGold = '#c59c6c';
+  const charts = [];
+  function getChartColors() {
+    const s = getComputedStyle(document.documentElement);
+    return {
+      text: s.getPropertyValue('--bdm-text').trim() || '#5f5555',
+      grid: s.getPropertyValue('--bdm-primary-soft').trim() || 'rgba(163, 32, 32, 0.08)',
+      primary: s.getPropertyValue('--bdm-primary').trim() || '#a32020',
+      blue: '#3ba3e3',
+      gold: '#c59c6c',
+    };
+  }
 
   // Gender chart (doughnut)
   const genderLabels = {{ gender_labels | default([]) | tojson }};
   const genderData = {{ gender_values | default([]) | tojson }};
   const genderCtx = document.getElementById('genderChart');
   if (genderCtx) {
-    new Chart(genderCtx, {
+    const cc = getChartColors();
+    charts.push(new Chart(genderCtx, {
       type: 'doughnut',
       data: {
         labels: genderLabels,
         datasets: [{
           data: genderData,
-          backgroundColor: [chartPrimary, chartBlue, chartGold, '#64748b'],
+          backgroundColor: [cc.primary, cc.blue, cc.gold, '#64748b'],
           borderColor: '#ffffff',
           borderWidth: 4,
           hoverOffset: 6,
@@ -190,13 +319,45 @@
         plugins: {
           legend: {
             position: 'bottom',
-            labels: { color: chartTextColor, usePointStyle: true, boxWidth: 8 }
+            labels: { color: cc.text, usePointStyle: true, boxWidth: 8 }
           }
         },
         responsive: true,
         maintainAspectRatio: false
       }
-    });
+    }));
+  }
+
+  // Status chart (doughnut)
+  const statusLabels = {{ status_labels | default([]) | tojson }};
+  const statusValues = {{ status_values | default([]) | tojson }};
+  const statusCtx = document.getElementById('statusChart');
+  if (statusCtx) {
+    const cc = getChartColors();
+    charts.push(new Chart(statusCtx, {
+      type: 'doughnut',
+      data: {
+        labels: statusLabels,
+        datasets: [{
+          data: statusValues,
+          backgroundColor: ['#22c55e', '#eab308', '#64748b'],
+          borderColor: '#ffffff',
+          borderWidth: 4,
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        cutout: '68%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: cc.text, usePointStyle: true, boxWidth: 8 }
+          }
+        },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    }));
   }
 
     // Documents by type (bar)
@@ -204,14 +365,15 @@
   const docTypeValues = {{ doc_type_values | default([]) | tojson }};
   const docTypeCtx = document.getElementById('docTypeChart');
   if (docTypeCtx) {
-    new Chart(docTypeCtx, {
+    const cc = getChartColors();
+    charts.push(new Chart(docTypeCtx, {
       type: 'bar',
       data: {
         labels: docTypeLabels,
         datasets: [{
           data: docTypeValues,
           backgroundColor: 'rgba(163, 32, 32, 0.72)',
-          borderColor: chartPrimary,
+          borderColor: cc.primary,
           borderWidth: 1,
           borderRadius: 8,
           maxBarThickness: 54,
@@ -220,13 +382,13 @@
       options: {
         plugins: { legend: { display: false } },
         scales: {
-          x: { grid: { display: false }, ticks: { color: chartTextColor } },
-          y: { beginAtZero: true, ticks: { precision: 0, color: chartTextColor }, grid: { color: chartGridColor } }
+          x: { grid: { display: false }, ticks: { color: cc.text } },
+          y: { beginAtZero: true, ticks: { precision: 0, color: cc.text }, grid: { color: cc.grid } }
         },
         responsive: true,
         maintainAspectRatio: false
       }
-    });
+    }));
   }
 
 // Documents trend (line)
@@ -234,7 +396,8 @@
   const monthValues = {{ month_values | default([]) | tojson }};
   const trendCtx = document.getElementById('docsTrendChart');
   if (trendCtx) {
-    new Chart(trendCtx, {
+    const cc = getChartColors();
+    charts.push(new Chart(trendCtx, {
       type: 'line',
       data: {
         labels: monthLabels,
@@ -243,10 +406,10 @@
           data: monthValues,
           tension: 0.35,
           fill: true,
-          borderColor: chartPrimary,
+          borderColor: cc.primary,
           backgroundColor: 'rgba(163, 32, 32, 0.12)',
           pointBackgroundColor: '#ffffff',
-          pointBorderColor: chartPrimary,
+          pointBorderColor: cc.primary,
           pointBorderWidth: 2,
           pointRadius: 4,
         }]
@@ -254,13 +417,106 @@
       options: {
         plugins: { legend: { display: false } },
         scales: {
-          x: { grid: { display: false }, ticks: { color: chartTextColor } },
-          y: { beginAtZero: true, ticks: { precision: 0, color: chartTextColor }, grid: { color: chartGridColor } }
+          x: { grid: { display: false }, ticks: { color: cc.text } },
+          y: { beginAtZero: true, ticks: { precision: 0, color: cc.text }, grid: { color: cc.grid } }
         },
         responsive: true,
         maintainAspectRatio: false
       }
-    });
+    }));
   }
+
+  // Resident signups trend (line)
+  const residentMonthLabels = {{ resident_month_labels | default([]) | tojson }};
+  const residentMonthValues = {{ resident_month_values | default([]) | tojson }};
+  const residentTrendCtx = document.getElementById('residentTrendChart');
+  if (residentTrendCtx) {
+    const cc = getChartColors();
+    charts.push(new Chart(residentTrendCtx, {
+      type: 'line',
+      data: {
+        labels: residentMonthLabels,
+        datasets: [{
+          label: 'New residents',
+          data: residentMonthValues,
+          tension: 0.35,
+          fill: true,
+          borderColor: cc.blue,
+          backgroundColor: 'rgba(59, 163, 227, 0.12)',
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: cc.blue,
+          pointBorderWidth: 2,
+          pointRadius: 4,
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: cc.text } },
+          y: { beginAtZero: true, ticks: { precision: 0, color: cc.text }, grid: { color: cc.grid } }
+        },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    }));
+  }
+
+  const streetLabels = {{ street_labels | default([]) | tojson }};
+  const streetValues = {{ street_values | default([]) | tojson }};
+  const streetCtx = document.getElementById('streetChart');
+  if (streetCtx) {
+    const cc = getChartColors();
+    charts.push(new Chart(streetCtx, {
+      type: 'bar',
+      data: {
+        labels: streetLabels,
+        datasets: [{
+          data: streetValues,
+          backgroundColor: 'rgba(163, 32, 32, 0.72)',
+          borderColor: cc.primary,
+          borderWidth: 1,
+          borderRadius: 8,
+          maxBarThickness: 42,
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, ticks: { precision: 0, color: cc.text }, grid: { color: cc.grid } },
+          y: { grid: { display: false }, ticks: { color: cc.text } }
+        },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    }));
+  }
+
+  window.updateChartTheme = function() {
+    const cc = getChartColors();
+    charts.forEach(chart => {
+      if (chart.config.type === 'doughnut') {
+        const labels = chart.data.labels;
+        if (labels && labels[0] === 'Issued') {
+          // status chart — keep fixed colors
+        } else {
+          chart.data.datasets[0].backgroundColor = [cc.primary, cc.blue, cc.gold, '#64748b'];
+        }
+        chart.options.plugins.legend.labels.color = cc.text;
+      } else {
+        if (chart.data.datasets[0].label === 'New residents') {
+          chart.data.datasets[0].borderColor = cc.blue;
+          chart.data.datasets[0].backgroundColor = 'rgba(59, 163, 227, 0.12)';
+        } else {
+          chart.data.datasets[0].borderColor = cc.primary;
+        }
+        chart.options.scales.x.ticks.color = cc.text;
+        chart.options.scales.y.ticks.color = cc.text;
+        if (chart.options.scales.y.grid) chart.options.scales.y.grid.color = cc.grid;
+        if (chart.options.scales.x.grid) chart.options.scales.x.grid.color = cc.grid;
+      }
+      chart.update();
+    });
+  };
 </script>
 {% endblock %}

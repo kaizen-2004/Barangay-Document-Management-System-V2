@@ -4,28 +4,12 @@
 <div class="bdm-section-header">
     <div class="bdm-section-subtitle">Manage document templates and type metadata.</div>
     <div class="bdm-section-actions">
-      <a class="btn btn-success" href="{{ url_for('admin.add_document_type') }}">Add Type</a>
+      <a class="btn btn-success" href="{{ url_for('admin.add_document_type') }}"><i class="fas fa-plus"></i> Add Type</a>
     </div>
 </div>
 
 <div class="bdm-table-card">
-    <div class="mb-3 small text-muted">
-            <div class="d-flex align-items-center gap-2 mb-1">
-                <strong>Template storage:</strong>
-                <code id="template-storage-path">{{ template_storage_dir }}</code>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-copy-target="template-storage-path">Copy</button>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                <strong>Generated documents:</strong>
-                <code id="output-storage-path">{{ output_storage_dir }}</code>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-copy-target="output-storage-path">Copy</button>
-            </div>
-            <form method="POST" action="{{ url_for('admin.cleanup_document_type_templates') }}" class="mt-2">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Delete orphaned template files that are not referenced by any document type?');">
-                    Cleanup Orphaned Templates
-                </button>
-            </form>
+          <div class="bdm-table-title"><i class="fas fa-file-pen me-1"></i> Document Types</div>
         </div>
         <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -39,7 +23,7 @@
                     <th>Photo Required</th>
                     <th>Validity</th>
                     <th>Placeholder Rules</th>
-                    <th>Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -52,24 +36,24 @@
                         {% if dt.template_filename %}
                             {{ dt.template_filename }} (v{{ dt.template_version or 1 }})
                         {% else %}
-                            No DOCX template
+                            <span class="text-muted">No DOCX template</span>
                         {% endif %}
                     </td>
                     <td>{{ 'Yes' if dt.template_active else 'No' }}</td>
                     <td>{{ 'Yes' if dt.requires_photo else 'No' }}</td>
                     <td>{{ dt.validity_text or 'Auto' }}</td>
                     <td>{{ 'Custom' if dt.placeholder_config else 'Default' }}</td>
-                    <td>
-                        <a class="btn btn-sm btn-primary" href="{{ url_for('admin.edit_document_type', type_id=dt.id) }}">Edit</a>
-                        <form method="POST" action="{{ url_for('admin.delete_document_type', type_id=dt.id) }}" style="display:inline;">
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.edit_document_type', type_id=dt.id) }}" title="Edit"><i class="fas fa-pen"></i></a>
+                        <form method="POST" action="{{ url_for('admin.delete_document_type', type_id=dt.id) }}" style="display:inline;" class="d-inline" data-confirm="Delete this document type?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('Delete this document type?');">Delete</button>
+                            <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete"><i class="fas fa-trash-can"></i></button>
                         </form>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9" class="text-center">No document types found.</td>
+                    <td colspan="9" class="text-center text-muted p-3"><i class="fas fa-file me-2"></i>No document types found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

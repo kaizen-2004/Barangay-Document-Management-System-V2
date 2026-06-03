@@ -2,6 +2,15 @@
 
 {% block content %}
 <div class="bdm-form-card">
+  <div class="bdm-form-section">
+    <h3 class="bdm-form-section-title"><i class="fas fa-user"></i> User Profile</h3>
+    <dl class="row">
+      <dt class="col-sm-3">Username</dt>
+      <dd class="col-sm-9">{{ current_user.username }}</dd>
+      <dt class="col-sm-3">Role</dt>
+      <dd class="col-sm-9">{{ current_user.role|title }}</dd>
+    </dl>
+  </div>
 <form method="post" novalidate>
     {{ form.hidden_tag() }}
     <div class="bdm-form-section">
@@ -47,7 +56,7 @@
       </div>
     </div>
     <div class="bdm-form-actions">
-      <button type="submit" class="btn btn-primary">Change Password</button>
+      <button type="submit" class="btn btn-primary">Update Password</button>
       <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">Cancel</a>
     </div>
 </form>

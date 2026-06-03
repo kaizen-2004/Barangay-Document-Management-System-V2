@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="bdm-section-header">
+    <div class="bdm-section-subtitle">Manage available placeholder names for document type templates.</div>
+    <div class="bdm-section-actions">
+        <button type="button" class="btn btn-success" data-bs-toggle="collapse" data-bs-target="#addForm"><i class="fas fa-plus"></i> Add Placeholder</button>
+    </div>
+</div>
+
+<div class="collapse mb-3" id="addForm">
+    <div class="bdm-form-card p-3">
+        <form method="POST" action="{{ url_for('admin.add_placeholder') }}" class="d-flex gap-2 align-items-end flex-wrap">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div>
+                <label class="form-label small mb-1">Placeholder Name</label>
+                <input type="text" name="name" class="form-control" placeholder="e.g. middle_name" required>
+            </div>
+            <div>
+                <label class="form-label small mb-1">Group / Category</label>
+                <input type="text" name="group" class="form-control" placeholder="e.g. Resident Information">
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Add</button>
+        </form>
+    </div>
+</div>
+
+<div class="bdm-table-card">
+    <div class="bdm-table-toolbar px-3 pt-3">
+      <div class="bdm-table-title"><i class="fas fa-tags me-1"></i> Placeholders</div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Group</th>
+                    <th>Created</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ph in placeholders %}
+                <tr>
+                    <td><code>{{ ph.name }}</code></td>
+                    <td>{{ ph.group or '—' }}</td>
+                    <td class="small text-muted">{{ ph.created_at.strftime('%b %d, %Y') }}</td>
+                    <td class="text-end">
+                        <form method="POST" action="{{ url_for('admin.delete_placeholder', ph_id=ph.id) }}" class="d-inline" data-confirm="Delete placeholder '{{ ph.name }}'?">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="fas fa-trash-can"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center text-muted p-3"><i class="fas fa-tags me-2"></i>No placeholders yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -5,114 +5,128 @@
 <form method="POST" enctype="multipart/form-data">
     {{ form.hidden_tag() }}
 
-    <div class="form-group">
-        {{ form.name.label(class="form-label") }}
-        {{ form.name(class="form-control") }}
-        {% for error in form.name.errors %}
-            <div class="text-danger">{{ error }}</div>
-        {% endfor %}
-    </div>
-
-    <div class="form-group">
-        {{ form.description.label(class="form-label") }}
-        {{ form.description(class="form-control", rows=3) }}
-        {% for error in form.description.errors %}
-            <div class="text-danger">{{ error }}</div>
-        {% endfor %}
-    </div>
-
-    <div class="form-group">
-        {{ form.template_file.label(class="form-label") }}
-        {{ form.template_file(class="form-control") }}
-        {% for error in form.template_file.errors %}
-            <div class="text-danger">{{ error }}</div>
-        {% endfor %}
-        <div class="form-text">Upload a .docx template containing the required placeholders.</div>
-        {% if document_type and document_type.template_filename %}
-            <div class="form-text">Current: {{ document_type.template_filename }} (v{{ document_type.template_version or 1 }})</div>
-        {% endif %}
-    </div>
-
-    <div class="form-check mb-3">
-        {{ form.template_active(class="form-check-input") }}
-        {{ form.template_active.label(class="form-check-label") }}
-    </div>
-
-    <div class="form-group">
-        {{ form.validity_text.label(class="form-label") }}
-        {{ form.validity_text(class="form-control", placeholder="e.g. 6 months, 1 year") }}
-        {% for error in form.validity_text.errors %}
-            <div class="text-danger">{{ error }}</div>
-        {% endfor %}
-        <div class="form-text">Used for <code>{{ validity }}</code> placeholder. Leave blank to use automatic default.</div>
-    </div>
-
-    <div class="form-group">
-        {{ form.placeholder_config.label(class="form-label") }}
-        {{ form.placeholder_config(class="form-control d-none", rows=7, placeholder='{"required": ["resident_name", "address", "purpose", "issue_date", "resident_photo", "qr_code"]}') }}
-        {% for error in form.placeholder_config.errors %}
-            <div class="text-danger">{{ error }}</div>
-        {% endfor %}
-        <div class="form-text">Choose which template placeholders are required for this document type.</div>
-
-        <div class="mt-2">
-            <div class="small text-muted mb-1">Required template placeholders</div>
-            <div id="placeholder-picker" class="d-flex flex-wrap gap-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="resident_name">resident_name</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="address">address</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="purpose">purpose</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="issue_date">issue_date</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="resident_photo">resident_photo</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="qr_code">qr_code</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="resident_id">resident_id</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="birth_date">birth_date</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="marital_status">marital_status</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="year_on_barangay">year_on_barangay</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="validity">validity</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="author">author</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="document_id">document_id</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="document_type">document_type</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-ph="captain_name">captain_name</button>
-            </div>
-            <div id="custom-placeholder-wrap" class="mt-2" style="display: none;">
-                <div class="small text-muted mb-1">Custom placeholders from fill-out fields</div>
-                <div id="custom-placeholder-list" class="d-flex flex-wrap gap-2"></div>
-            </div>
-            <div class="mt-2 d-flex gap-2">
-                <button type="button" class="btn btn-sm btn-outline-primary" id="btn-default-placeholders">Use Default Required</button>
-                <button type="button" class="btn btn-sm btn-outline-danger" id="btn-clear-placeholders">Clear</button>
-            </div>
+    {# Section 1: Basic Information #}
+    <div class="bdm-form-section">
+      <div class="bdm-form-section-title"><i class="fas fa-info-circle me-1"></i> Basic Information</div>
+      <div class="bdm-form-grid">
+        <div class="form-group">
+          {{ form.name.label(class="form-label") }}
+          {{ form.name(class="form-control", placeholder="e.g. Barangay Clearance") }}
+          {% for error in form.name.errors %}<div class="bdm-field-error">{{ error }}</div>{% endfor %}
         </div>
-    </div>
-
-    <div class="form-group">
-        {{ form.field_config.label(class="form-label") }}
-        {{ form.field_config(class="form-control d-none", rows=8, placeholder='{"fields": [{"name": "contact_number", "label": "Contact Number", "type": "text", "required": true}]}') }}
-        {% for error in form.field_config.errors %}
-            <div class="text-danger">{{ error }}</div>
-        {% endfor %}
-        <div class="form-text">Add the extra information users must fill out when creating this document.</div>
-        <div class="bdm-field-builder mt-2">
-            <div class="bdm-field-builder-head d-none d-md-grid">
-                <span>Field Label</span>
-                <span>Placeholder Name</span>
-                <span>Type</span>
-                <span>Required</span>
-                <span></span>
-            </div>
-            <div id="field-builder-rows" class="bdm-field-builder-rows"></div>
-            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="btn-add-field">Add Field</button>
+        <div class="form-group">
+          {{ form.description.label(class="form-label") }}
+          {{ form.description(class="form-control", rows=2, placeholder="Brief description of this document type") }}
+          {% for error in form.description.errors %}<div class="bdm-field-error">{{ error }}</div>{% endfor %}
         </div>
-    </div>
-
-    <div class="form-check mb-3">
+      </div>
+      <div class="form-check mt-2">
         {{ form.requires_photo(class="form-check-input") }}
         {{ form.requires_photo.label(class="form-check-label") }}
+        <div class="bdm-form-help">If checked, document issuance will require a resident photo.</div>
+      </div>
     </div>
 
+    {# Section 2: Template Configuration #}
+    <div class="bdm-form-section">
+      <div class="bdm-form-section-title"><i class="fas fa-file-word me-1"></i> Template Configuration</div>
+      <div class="bdm-form-grid">
+        <div class="form-group">
+          {{ form.template_file.label(class="form-label") }}
+          {{ form.template_file(class="form-control") }}
+          {% for error in form.template_file.errors %}<div class="bdm-field-error">{{ error }}</div>{% endfor %}
+          <div class="bdm-form-help">Upload a .docx template containing the required placeholders.</div>
+          {% if document_type and document_type.template_filename %}
+            <div class="bdm-form-help mt-1">Current: <strong>{{ document_type.template_filename }}</strong> (v{{ document_type.template_version or 1 }})</div>
+          {% endif %}
+        </div>
+        <div class="d-flex flex-column gap-2">
+          <div class="form-check">
+            {{ form.template_active(class="form-check-input") }}
+            {{ form.template_active.label(class="form-check-label") }}
+          </div>
+          {% if document_type and document_type.template_path and document_type.template_active %}
+            <a class="btn btn-sm btn-outline-info align-self-start" href="{{ url_for('admin.preview_document_type', type_id=document_type.id) }}" target="_blank">
+              <i class="fas fa-eye me-1"></i> Preview Template
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# Section 3: Validity #}
+    <div class="bdm-form-section">
+      <div class="bdm-form-section-title"><i class="fas fa-calendar-alt me-1"></i> Validity</div>
+      <div class="bdm-form-grid">
+        <div class="form-group" style="max-width:220px;">
+          {{ form.validity_months.label(class="form-label") }}
+          {{ form.validity_months(class="form-control", placeholder="e.g. 6 or 12") }}
+          {% for error in form.validity_months.errors %}<div class="bdm-field-error">{{ error }}</div>{% endfor %}
+          <div class="bdm-form-help">Used for <code>{{ '{{ validity }}' }}</code> and <code>{{ '{{ expiration_date }}' }}</code> placeholders.</div>
+        </div>
+      </div>
+    </div>
+
+    {# Section 4: Required Placeholders #}
+    <div class="bdm-form-section">
+      <div class="bdm-form-section-title"><i class="fas fa-tags me-1"></i> Required Placeholders</div>
+
+      {# Hidden textarea #}
+      {{ form.placeholder_config(class="form-control d-none", rows=3) }}
+      {% for error in form.placeholder_config.errors %}<div class="bdm-field-error">{{ error }}</div>{% endfor %}
+      <div class="bdm-form-help mb-2">Click placeholders to toggle whether they are required in the template.</div>
+
+      {% set grouped = placeholders|default([])|groupby('group') %}
+      {% for group in grouped %}
+      <div class="mb-3">
+        <div class="small fw-semibold text-muted mb-1">{{ group.grouper or 'Uncategorized' }}</div>
+        <div class="d-flex flex-wrap gap-1">
+          {% for ph in group.list %}
+          <button type="button" class="btn btn-sm btn-outline-secondary ph-btn" data-ph="{{ ph.name }}">{{ ph.name }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+
+      {# Custom placeholders from fill-out fields #}
+      <div id="custom-placeholder-wrap" class="mb-3" style="display:none;">
+        <div class="small fw-semibold text-muted mb-1">Custom Fill-out Fields</div>
+        <div id="custom-placeholder-list" class="d-flex flex-wrap gap-1"></div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-outline-primary" id="btn-default-placeholders">Use Default Required</button>
+        <button type="button" class="btn btn-sm btn-outline-danger" id="btn-clear-placeholders">Clear All</button>
+      </div>
+    </div>
+
+    {# Section 5: Fill-out Fields #}
+    <div class="bdm-form-section">
+      <div class="bdm-form-section-title"><i class="fas fa-list-check me-1"></i> Fill-out Fields</div>
+
+      {{ form.field_config(class="form-control d-none", rows=3) }}
+      {% for error in form.field_config.errors %}<div class="bdm-field-error">{{ error }}</div>{% endfor %}
+      <div class="bdm-form-help mb-2">Add extra fields that users must fill out when creating this document.</div>
+
+      <div class="bdm-field-builder">
+        <div class="bdm-field-builder-head d-none d-md-grid">
+          <span>Field Label</span>
+          <span>Placeholder Name</span>
+          <span>Type</span>
+          <span>Req.</span>
+          <span></span>
+        </div>
+        <div id="field-builder-rows" class="bdm-field-builder-rows"></div>
+        <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="btn-add-field">
+          <i class="fas fa-plus me-1"></i> Add Field
+        </button>
+      </div>
+    </div>
+
+    {# Actions #}
     <div class="bdm-form-actions">
-        <button type="submit" class="btn btn-primary">{{ submit_label or 'Save' }}</button>
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin.list_document_types') }}">Cancel</a>
+      <button type="submit" class="btn btn-primary"><i class="fas fa-floppy-disk me-1"></i> {{ submit_label or 'Save' }}</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.list_document_types') }}">Cancel</a>
     </div>
 </form>
 </div>
@@ -121,22 +135,20 @@
   (function () {
     const textarea = document.getElementById('placeholder_config');
     const fieldTextarea = document.getElementById('field_config');
-    const picker = document.getElementById('placeholder-picker');
+    const picker = document.getElementById('placeholder-picker') || document.querySelector('.bdm-form-section .ph-btn')?.closest('.bdm-form-section');
+    const phBtns = document.querySelectorAll('.ph-btn');
     const defaultBtn = document.getElementById('btn-default-placeholders');
     const clearBtn = document.getElementById('btn-clear-placeholders');
     const fieldRows = document.getElementById('field-builder-rows');
     const addFieldBtn = document.getElementById('btn-add-field');
     const customPlaceholderWrap = document.getElementById('custom-placeholder-wrap');
     const customPlaceholderList = document.getElementById('custom-placeholder-list');
-    if (!textarea || !picker) return;
+
+    if (!textarea || !phBtns.length) return;
 
     const defaultRequired = [
-      'resident_name',
-      'address',
-      'purpose',
-      'issue_date',
-      'resident_photo',
-      'qr_code'
+      'resident_name', 'address', 'purpose', 'issue_date',
+      'resident_photo', 'qr_code'
     ];
 
     function parseConfig() {
@@ -147,27 +159,27 @@
         if (!parsed || typeof parsed !== 'object') return { required: [] };
         const required = Array.isArray(parsed.required) ? parsed.required.map(String) : [];
         return { required };
-      } catch {
-        return { required: [] };
-      }
+      } catch { return { required: [] }; }
     }
 
     function writeConfig(required) {
-      const unique = Array.from(new Set(required.map((x) => String(x).trim()).filter(Boolean)));
+      const unique = Array.from(new Set(required.map(x => String(x).trim()).filter(Boolean)));
       textarea.value = JSON.stringify({ required: unique }, null, 2);
       paintSelected(unique);
     }
 
     function paintSelected(required) {
-      picker.querySelectorAll('button[data-ph]').forEach((btn) => {
+      phBtns.forEach(btn => {
         const on = required.includes(btn.dataset.ph);
         btn.classList.toggle('btn-outline-secondary', !on);
-        btn.classList.toggle('btn-secondary', on);
+        btn.classList.toggle('btn-primary', on);
+        btn.classList.remove('btn-secondary');
       });
     }
 
-    picker.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-ph]');
+    // Event delegation for ALL placeholder buttons (listening on document)
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ph-btn');
       if (!btn) return;
       const config = parseConfig();
       const set = new Set(config.required);
@@ -179,30 +191,24 @@
     defaultBtn?.addEventListener('click', () => writeConfig(defaultRequired));
     clearBtn?.addEventListener('click', () => writeConfig([]));
 
+    // Initial paint
     paintSelected(parseConfig().required);
 
+    // --- Field builder ---
     function slugifyFieldName(label) {
-      return String(label || '')
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
+      return String(label || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     }
 
     function parseFields() {
       const raw = (fieldTextarea?.value || '').trim();
       if (!raw) return [];
-      try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed.fields) ? parsed.fields : [];
-      } catch {
-        return [];
-      }
+      try { const p = JSON.parse(raw); return Array.isArray(p.fields) ? p.fields : []; }
+      catch { return []; }
     }
 
     function writeFields() {
       if (!fieldTextarea || !fieldRows) return;
-      const fields = Array.from(fieldRows.querySelectorAll('.bdm-field-row')).map((row) => {
+      const fields = Array.from(fieldRows.querySelectorAll('.bdm-field-row')).map(row => {
         const label = row.querySelector('[data-field="label"]').value.trim();
         const nameInput = row.querySelector('[data-field="name"]');
         const name = (nameInput.value.trim() || slugifyFieldName(label));
@@ -213,16 +219,16 @@
           type: row.querySelector('[data-field="type"]').value,
           required: row.querySelector('[data-field="required"]').checked,
         };
-      }).filter((field) => field.name);
+      }).filter(f => f.name);
       fieldTextarea.value = fields.length ? JSON.stringify({ fields }, null, 2) : '';
       syncFieldPlaceholders(fields);
     }
 
     function syncFieldPlaceholders(fields) {
       const config = parseConfig();
-      const builtIn = new Set(Array.from(picker.querySelectorAll('button[data-ph]')).map((btn) => btn.dataset.ph));
-      const customNames = fields.map((field) => field.name).filter(Boolean);
-      const required = config.required.filter((name) => builtIn.has(name) || customNames.includes(name));
+      const builtIn = new Set(Array.from(phBtns).map(b => b.dataset.ph));
+      const customNames = fields.map(f => f.name).filter(Boolean);
+      const required = config.required.filter(n => builtIn.has(n) || customNames.includes(n));
       writeConfig([...required, ...customNames]);
       renderCustomPlaceholders(customNames);
     }
@@ -233,7 +239,7 @@
       customPlaceholderWrap.style.display = customNames.length ? '' : 'none';
       customNames.forEach((name) => {
         const badge = document.createElement('span');
-        badge.className = 'btn btn-sm btn-secondary disabled';
+        badge.className = 'btn btn-sm btn-primary disabled';
         badge.textContent = name;
         customPlaceholderList.appendChild(badge);
       });
@@ -252,8 +258,8 @@
           <option value="date">Date</option>
           <option value="number">Number</option>
         </select>
-        <label class="form-check bdm-field-required"><input class="form-check-input" type="checkbox" data-field="required"> <span>Required</span></label>
-        <button type="button" class="btn btn-sm btn-outline-danger" data-remove-field>Remove</button>
+        <label class="form-check bdm-field-required"><input class="form-check-input" type="checkbox" data-field="required"> <span class="small">Req</span></label>
+        <button type="button" class="btn btn-sm btn-outline-danger" data-remove-field title="Remove"><i class="fas fa-trash-can"></i></button>
       `;
       row.querySelector('[data-field="type"]').value = field.type || 'text';
       row.querySelector('[data-field="required"]').checked = Boolean(field.required);
@@ -268,10 +274,7 @@
 
     parseFields().forEach(addFieldRow);
     writeFields();
-    addFieldBtn?.addEventListener('click', () => {
-      addFieldRow();
-      writeFields();
-    });
+    addFieldBtn?.addEventListener('click', () => { addFieldRow(); writeFields(); });
   })();
 </script>
 {% endblock %}

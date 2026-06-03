@@ -4,7 +4,7 @@
 <div class="bdm-section-header">
   <div class="bdm-section-subtitle">Manage system user accounts.</div>
   <div class="bdm-section-actions">
-    <a class="btn btn-primary" href="{{ url_for('admin.add_user') }}">Add User</a>
+    <a class="btn btn-primary" href="{{ url_for('admin.add_user') }}"><i class="fas fa-plus"></i> Add User</a>
   </div>
 </div>
 
@@ -15,8 +15,8 @@
       <input class="form-control" type="text" name="q" value="{{ q }}" placeholder="Username, role...">
     </div>
     <div class="col-12 col-md-6 d-flex gap-2">
-      <button class="btn btn-primary" type="submit">Filter</button>
-      <a class="btn btn-outline-secondary" href="{{ url_for('admin.list_users') }}">Reset</a>
+      <button class="btn btn-primary" type="submit"><i class="fas fa-magnifying-glass"></i> Filter</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.list_users') }}"><i class="fas fa-rotate-left"></i> Reset</a>
     </div>
   </div>
 </form>
@@ -26,25 +26,32 @@
     <thead>
         <tr>
             <th scope="col">ID</th>
-            <th scope="col">Username</th>
+            <th scope="col">User</th>
             <th scope="col">Role</th>
-            <th scope="col">Created At</th>
-            <th scope="col">Actions</th>
+            <th scope="col">Created</th>
+            <th scope="col" class="text-end">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for user in users %}
         <tr>
             <td>{{ user.id }}</td>
-            <td>{{ user.username }}</td>
-            <td>{{ user.role }}</td>
-            <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else '' }}</td>
             <td>
-                <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+              <div class="d-flex align-items-center gap-2">
+                <span class="bdm-avatar-initials" style="background: {% if user.role == 'admin' %}#7f1d1d{% else %}#1e40af{% endif %};">
+                  {{ user.username[:1]|upper }}
+                </span>
+                <span>{{ user.username }}</span>
+              </div>
+            </td>
+            <td><span class="bdm-role-badge bdm-role-{{ user.role }}">{{ user.role|title }}</span></td>
+            <td class="small text-muted">{{ user.created_at.strftime('%b %d, %Y') if user.created_at else '—' }}</td>
+            <td class="text-end">
+                <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="fas fa-pen"></i></a>
                 {% if user.id != current_user.id %}
-                <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" style="display:inline-block;" onsubmit="return confirm('Are you sure you want to delete this user?');">
+                <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" style="display:inline-block; vertical-align: middle;" data-confirm="Are you sure you want to delete this user?">
                     {{ delete_form.hidden_tag() }}
-                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="fas fa-trash-can"></i></button>
                 </form>
                 {% endif %}
             </td>

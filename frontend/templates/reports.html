@@ -5,10 +5,12 @@
 {# Page header with title, subtitle and export actions #}
 <div class="bdm-report-hero bdm-section">
   <div>
+    <div class="bdm-report-kicker">Analytics</div>
     <h2>Document Reports</h2>
     <p>Filter issued documents by date range and export the current result set.</p>
   </div>
-  <div class="bdm-section-actions">
+  <div class="bdm-report-export-card">
+    <div class="small text-muted mb-2">Export current view</div>
     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.export_reports', fmt='csv', date_from=date_from, date_to=date_to) }}">CSV</a>
     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.export_reports', fmt='xlsx', date_from=date_from, date_to=date_to) }}">Excel</a>
     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.export_reports', fmt='pdf', date_from=date_from, date_to=date_to) }}">PDF</a>
@@ -18,13 +20,30 @@
 {# Date filter #}
 <form method="get" class="bdm-filter-card bdm-section">
   <div class="row g-2 align-items-end">
-    <div class="col-md-5">
+    <div class="col-md-3">
       <label class="form-label small mb-1">From</label>
       <input type="date" class="form-control" name="date_from" value="{{ date_from }}">
     </div>
-    <div class="col-md-5">
+    <div class="col-md-3">
       <label class="form-label small mb-1">To</label>
       <input type="date" class="form-control" name="date_to" value="{{ date_to }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small mb-1">Type</label>
+      <select name="type" class="form-select">
+        <option value="">All</option>
+        {% for dt in document_types %}
+          <option value="{{ dt.id }}" {% if filter_type_id == (dt.id|string) %}selected{% endif %}>{{ dt.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small mb-1">Status</label>
+      <select name="status" class="form-select">
+        <option value="">Issued</option>
+        <option value="draft" {% if filter_status == 'draft' %}selected{% endif %}>Draft</option>
+        <option value="issued" {% if filter_status == 'issued' %}selected{% endif %}>Issued</option>
+      </select>
     </div>
     <div class="col-md-2 d-flex gap-2">
       <button class="btn btn-primary w-100" type="submit">Apply</button>
@@ -35,31 +54,31 @@
 
 {# Metrics summary row #}
 <div class="row g-3 mb-3">
-  <div class="col-md-4">
-    <div class="bdm-metric-card h-100">
+  <div class="col-md-4 col-xl-3">
+    <div class="bdm-report-stat h-100">
       <div>
-        <div class="text-muted small">Documents in range</div>
-        <div class="h2 fw-semibold mb-0">{{ total_documents }}</div>
+        <div class="bdm-report-stat-label">Documents in range</div>
+        <div class="bdm-report-stat-value">{{ total_documents }}</div>
         <div class="text-muted small">{{ date_from or 'Start' }} to {{ date_to or 'Today' }}</div>
       </div>
     </div>
   </div>
-  <div class="col-md-8">
-    <div class="bdm-metric-card h-100">
+  <div class="col-md-8 col-xl-9">
+    <div class="bdm-report-analytics-card h-100">
       <div class="w-100">
-        <div class="text-muted small mb-2">Breakdown by document type</div>
+        <div class="bdm-report-card-title">Breakdown by document type</div>
         <div class="bdm-report-type-list">
           {% for name, count in by_type.items() %}
             {% set percent = (count / total_documents * 100) if total_documents else 0 %}
             <div class="bdm-report-type-row">
               <div class="d-flex justify-content-between gap-3 small">
                 <strong>{{ name }}</strong>
-                <span>{{ count }}</span>
+                <span class="bdm-report-count">{{ count }}</span>
               </div>
               <div class="bdm-report-bar" aria-hidden="true"><span style="width: {{ percent }}%;"></span></div>
             </div>
           {% else %}
-            <span class="text-muted">No data</span>
+            <div class="bdm-empty-state-icon py-3"><i class="fas fa-chart-bar"></i><span>No document type data for this range.</span></div>
           {% endfor %}
         </div>
       </div>
@@ -68,7 +87,7 @@
 </div>
 
 {# Document list table #}
-<div class="bdm-table-card">
+<div class="bdm-table-card bdm-report-table">
   <div class="bdm-table-toolbar px-3 pt-3">
     <div>
       <div class="bdm-table-title">Issued documents</div>
@@ -93,13 +112,13 @@
         {% for d in documents %}
         <tr>
           <td>{{ d.id }}</td>
-          <td>{{ d.resident.first_name }} {{ d.resident.last_name }}</td>
+          <td>{{ d.resident.first_name|upper }} {{ d.resident.last_name|upper }}</td>
           <td>{{ d.document_type.name if d.document_type else '—' }}</td>
           <td>{{ d.issue_date.strftime('%Y-%m-%d') if d.issue_date else '—' }}</td>
           <td class="text-truncate" style="max-width: 380px;">{{ d.details }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="text-muted p-3">No documents found for this date range.</td></tr>
+        <tr><td colspan="5" class="text-muted p-3"><i class="fas fa-file-lines me-2"></i>No documents found for this date range.</td></tr>
         {% endfor %}
       </tbody>
     </table>

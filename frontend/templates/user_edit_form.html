@@ -4,27 +4,44 @@
 <div class="bdm-form-card">
 <form method="post" novalidate>
     {{ form.hidden_tag() }}
-    <div class="form-group">
-        {{ form.username.label(class_="form-label") }}
-        {{ form.username(class_="form-control", placeholder="Enter username") }}
-        {% for error in form.username.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
+    <div class="bdm-form-section">
+      <h3 class="bdm-form-section-title"><i class="fas fa-user"></i> Account Details</h3>
+      <div class="bdm-form-grid">
+        <div class="form-group">
+            {{ form.username.label(class_="form-label") }}
+            {{ form.username(class_="form-control", placeholder="Enter username") }}
+            {% for error in form.username.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            {{ form.role.label(class_="form-label") }}
+            {{ form.role(class_="form-select") }}
+            {% for error in form.role.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+      </div>
     </div>
-    <div class="form-group">
-        {{ form.role.label(class_="form-label") }}
-        {{ form.role(class_="form-control") }}
-        {% for error in form.role.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="form-group">
-        {{ form.password.label(class_="form-label") }}
-        {{ form.password(class_="form-control", placeholder="Leave blank to keep current password") }}
-        <div class="form-text text-muted">If changing, use at least 10 characters with upper, lower, number, and symbol.</div>
-        {% for error in form.password.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
+    <div class="bdm-form-section">
+      <h3 class="bdm-form-section-title"><i class="fas fa-lock"></i> Change Password <small class="text-muted fw-normal">(leave blank to keep current)</small></h3>
+      <div class="form-group">
+          {{ form.password.label(class_="form-label") }}
+          <div class="bdm-pw-wrap">
+            {{ form.password(class_="form-control", placeholder="Leave blank to keep current password", id="password") }}
+            <button type="button" class="bdm-pw-eye" title="Show password"><i class="fas fa-eye"></i></button>
+          </div>
+          <ul class="bdm-pw-checklist list-unstyled" id="pw-checklist">
+            <li id="pw-length"><i class="fas fa-circle"></i> At least 10 characters</li>
+            <li id="pw-upper"><i class="fas fa-circle"></i> One uppercase letter</li>
+            <li id="pw-lower"><i class="fas fa-circle"></i> One lowercase letter</li>
+            <li id="pw-number"><i class="fas fa-circle"></i> One number</li>
+            <li id="pw-symbol"><i class="fas fa-circle"></i> One symbol</li>
+          </ul>
+          {% for error in form.password.errors %}
+              <div class="text-danger small">{{ error }}</div>
+          {% endfor %}
+      </div>
     </div>
     <div class="bdm-form-actions">
       <button type="submit" class="btn btn-primary">Update</button>
@@ -32,4 +49,41 @@
     </div>
 </form>
 </div>
+
+<script>
+(function() {
+  const pw = document.getElementById('password');
+  if (!pw) return;
+  const checks = {
+    length: document.getElementById('pw-length'),
+    upper: document.getElementById('pw-upper'),
+    lower: document.getElementById('pw-lower'),
+    number: document.getElementById('pw-number'),
+    symbol: document.getElementById('pw-symbol'),
+  };
+  pw.addEventListener('input', function() {
+    if (!this.value) {
+      for (const id in checks) {
+        const el = checks[id];
+        if (!el) continue;
+        el.classList.remove('bdm-check-ok');
+        el.querySelector('i').className = 'fas fa-circle';
+      }
+      return;
+    }
+    const v = this.value;
+    const ok = (id, cond) => {
+      const el = checks[id];
+      if (!el) return;
+      el.classList.toggle('bdm-check-ok', cond);
+      el.querySelector('i').className = cond ? 'fas fa-circle-check' : 'fas fa-circle';
+    };
+    ok('length', v.length >= 10);
+    ok('upper', /[A-Z]/.test(v));
+    ok('lower', /[a-z]/.test(v));
+    ok('number', /\d/.test(v));
+    ok('symbol', /[^a-zA-Z0-9]/.test(v));
+  });
+})();
+</script>
 {% endblock %}

@@ -2,77 +2,67 @@
 
 {% block content %}
 <div class="bdm-section-header">
-  <div class="bdm-section-subtitle">Full history for this resident.</div>
+  <div class="bdm-section-subtitle"><i class="fas fa-address-card me-1"></i> Full history for this resident.</div>
   <div class="bdm-section-actions">
-    <a class="btn btn-outline-secondary" href="{{ url_for('main.list_residents') }}">Back to Residents</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.list_residents') }}"><i class="fas fa-arrow-left"></i> Back</a>
     {% if not resident.is_archived %}
-      <a class="btn btn-primary" href="{{ url_for('main.edit_resident', resident_id=resident.id) }}">Edit</a>
+      <a class="btn btn-primary" href="{{ url_for('main.edit_resident', resident_id=resident.id) }}"><i class="fas fa-pen"></i> Edit</a>
     {% endif %}
   </div>
 </div>
 
-<div class="card mb-3">
-  <div class="card-body">
-    <div class="row g-3 align-items-center">
-      <div class="col-md-2">
+<div class="bdm-profile-hero mb-3">
+  <div class="bdm-profile-photo-wrap">
         {% if resident.photo_path %}
-          <img src="{{ url_for('static', filename=resident.photo_path) }}" alt="Photo" class="bdm-avatar-lg">
+          <img src="{{ url_for('static', filename=resident.photo_path) }}" alt="Photo" class="bdm-profile-photo">
         {% else %}
-          <div class="text-muted small">No photo</div>
+          <div class="bdm-profile-photo-empty"><i class="fas fa-user"></i></div>
         {% endif %}
+  </div>
+  <div class="bdm-profile-summary">
+    <div class="bdm-profile-name" style="text-transform: uppercase">{{ resident.last_name }}, {{ resident.first_name }} {% if resident.middle_name %}{{ resident.middle_name[0] }}.{% endif %}</div>
+    <div class="bdm-profile-meta">
+      <span><i class="fas fa-id-card me-1"></i> {{ resident.barangay_id or 'No Barangay ID' }}</span>
+      <span><i class="fas fa-venus-mars me-1"></i> {{ (resident.gender or '')|upper }}</span>
+      <span><i class="fas fa-cake-candles me-1"></i> {{ resident.birth_date.strftime('%Y-%m-%d') }}</span>
+    </div>
+    <div class="bdm-profile-detail-grid">
+      <div>
+        <div class="text-muted small"><i class="fas fa-location-dot me-1"></i> Address</div>
+        <div class="fw-semibold" style="text-transform: uppercase">{{ resident.full_address }}</div>
       </div>
-      <div class="col-md-10">
-        <div class="d-flex flex-wrap gap-3">
-          <div>
-            <div class="text-muted small">Name</div>
-            <div class="fw-semibold">{{ resident.last_name }}, {{ resident.first_name }} {% if resident.middle_name %}{{ resident.middle_name[0] }}.{% endif %}</div>
-          </div>
-          <div>
-            <div class="text-muted small">Barangay ID</div>
-            <div class="fw-semibold">{{ resident.barangay_id or '—' }}</div>
-          </div>
-          <div>
-            <div class="text-muted small">Birth Date</div>
-            <div class="fw-semibold">{{ resident.birth_date.strftime('%Y-%m-%d') }}</div>
-          </div>
-          <div>
-            <div class="text-muted small">Marital Status</div>
-            <div class="fw-semibold">{{ resident.marital_status or '—' }}</div>
-          </div>
-          <div>
-            <div class="text-muted small">Gender</div>
-            <div class="fw-semibold">{{ resident.gender }}</div>
-          </div>
-          <div>
-            <div class="text-muted small">Address</div>
-            <div class="fw-semibold">{{ resident.address }}</div>
-          </div>
-          <div>
-            <div class="text-muted small">Status</div>
-            {% if resident.is_archived %}
-              <span class="badge bg-secondary">Archived</span>
-            {% else %}
-              <span class="badge bg-success">Active</span>
-            {% endif %}
-          </div>
-          <div>
-            <div class="text-muted small">Last Updated</div>
-            <div class="fw-semibold">
-              {{ (resident.updated_at or resident.created_at).strftime('%Y-%m-%d %H:%M') if (resident.updated_at or resident.created_at) else '—' }}
-            </div>
-            <div class="small text-muted">{{ resident_updated_by or '—' }}</div>
-          </div>
-        </div>
+      <div>
+        <div class="text-muted small"><i class="fas fa-phone me-1"></i> Contact Number</div>
+        <div class="fw-semibold">{{ resident.contact_number or '—' }}</div>
+      </div>
+      <div>
+        <div class="text-muted small"><i class="fas fa-ring me-1"></i> Civil Status</div>
+        <div class="fw-semibold" style="text-transform: uppercase">{{ resident.marital_status or '—' }}</div>
+      </div>
+      <div>
+        <div class="text-muted small"><i class="fas fa-clock me-1"></i> Last Updated</div>
+        <div class="fw-semibold">{{ (resident.updated_at or resident.created_at)|local_datetime }}</div>
+        <div class="small text-muted">{{ resident_updated_by or '—' }}</div>
       </div>
     </div>
+  </div>
+  <div class="bdm-profile-status">
+            {% if resident.is_archived %}
+              <span class="bdm-status bdm-status-archived">Archived</span>
+            {% else %}
+              <span class="bdm-status bdm-status-active">Active</span>
+            {% endif %}
   </div>
 </div>
 
 {% if not resident.is_archived %}
-<div class="card mb-3">
-  <div class="card-header bg-transparent">
-    <div class="fw-semibold">Quick Issue</div>
-    <div class="text-muted small">Create a draft with the resident pre-selected.</div>
+<div class="bdm-info-card mb-3">
+  <div class="card-header bg-transparent d-flex align-items-center gap-2">
+    <i class="fas fa-file-export" style="color: var(--bdm-primary);"></i>
+    <div>
+      <div class="fw-semibold">Quick Issue</div>
+      <div class="text-muted small">Create a draft with the resident pre-selected.</div>
+    </div>
   </div>
   <div class="card-body">
     <div class="d-flex flex-wrap gap-2">
@@ -86,13 +76,13 @@
 </div>
 {% endif %}
 
-<div class="card">
-  <div class="card-header bg-transparent d-flex flex-wrap gap-2 align-items-center justify-content-between">
+<div class="bdm-table-card">
+  <div class="bdm-table-toolbar px-3 pt-3 d-flex flex-wrap gap-2 align-items-center justify-content-between">
     <div>
-      <div class="fw-semibold">Document History</div>
+      <div class="bdm-table-title"><i class="fas fa-file-lines me-1"></i> Document History</div>
       <div class="text-muted small">All documents for this resident.</div>
     </div>
-    <form method="get" class="d-flex gap-2">
+    <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
       <select name="status" class="form-select form-select-sm" style="min-width: 140px;">
         <option value="" {% if not doc_status %}selected{% endif %}>All Status</option>
         <option value="draft" {% if doc_status == 'draft' %}selected{% endif %}>Draft</option>
@@ -105,64 +95,84 @@
       <button class="btn btn-sm btn-primary" type="submit">Filter</button>
     </form>
   </div>
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0 align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>Type</th>
-            <th>Issue Date</th>
-            <th>Updated</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for doc in documents %}
-          <tr>
-            <td>{{ doc.document_type.name if doc.document_type else '—' }}</td>
-            <td>{{ doc.issue_date.strftime('%Y-%m-%d') if doc.issue_date else '—' }}</td>
-            <td>
-              {% set last_at = doc.updated_at or doc.issued_at or doc.created_at %}
-              {% set last_user_id = doc.updated_by_id or doc.issued_by_id or doc.created_by_id %}
-              <div class="small">{{ last_at.strftime('%Y-%m-%d %H:%M') if last_at else '—' }}</div>
-              <div class="small text-muted">{{ user_map.get(last_user_id, '—') }}</div>
-            </td>
-            <td>
-              {% if doc.is_archived %}
-                <span class="badge bg-secondary">Archived</span>
-              {% elif doc.status in ['draft', 'pending', 'approved'] %}
-                <span class="badge bg-warning text-dark">Draft</span>
-              {% else %}
-                <span class="badge bg-success">Issued</span>
-              {% endif %}
-            </td>
-            <td class="text-nowrap table-actions">
-              {% if doc.status == 'issued' and doc.file_path %}
-                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}" target="_blank" rel="noopener">Print</a>
-              {% endif %}
-              {% if not resident.is_archived and doc.document_type_id %}
-                <a class="btn btn-sm btn-outline-success" href="{{ url_for('main.issue_document', resident_id=resident.id, document_type_id=doc.document_type_id) }}">Issue Same</a>
-              {% endif %}
-              {% if not doc.is_archived and doc.status in ['draft', 'pending', 'approved'] %}
-                <a class="btn btn-sm btn-primary" href="{{ url_for('main.edit_document', document_id=doc.id) }}">Edit</a>
-              {% endif %}
-              {% if not doc.is_archived and doc.status in ['draft', 'pending', 'approved'] %}
-                <form method="POST" action="{{ url_for('main.finalize_document_issue', document_id=doc.id) }}" class="d-inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn btn-sm btn-outline-success">Issue</button>
-                </form>
-              {% endif %}
-            </td>
-          </tr>
-          {% else %}
-          <tr><td colspan="5" class="text-muted p-3">No documents found.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Type</th>
+          <th>Issue Date</th>
+          <th>Updated</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in documents %}
+        <tr>
+          <td>{{ doc.document_type.name if doc.document_type else '—' }}</td>
+          <td>{{ doc.issue_date.strftime('%Y-%m-%d') if doc.issue_date else '—' }}</td>
+          <td>
+            {% set last_at = doc.updated_at or doc.issued_at or doc.created_at %}
+            {% set last_user_id = doc.updated_by_id or doc.issued_by_id or doc.created_by_id %}
+            <div class="small">{{ last_at|local_datetime }}</div>
+            <div class="small text-muted">{{ user_map.get(last_user_id, '—') }}</div>
+          </td>
+          <td>
+            {% if doc.is_archived %}
+              <span class="bdm-status bdm-status-archived">Archived</span>
+            {% elif doc.status in ['draft', 'pending', 'approved'] %}
+              <span class="bdm-status bdm-status-draft">Draft</span>
+            {% else %}
+              <span class="bdm-status bdm-status-issued">Issued</span>
+            {% endif %}
+          </td>
+          <td class="text-nowrap table-actions">
+            <div class="action-group">
+              <div class="action-main">
+                {% if doc.status == 'issued' and doc.file_path %}
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}" target="_blank" rel="noopener">Print</a>
+                {% endif %}
+                {% if not resident.is_archived and doc.document_type_id %}
+                  <a class="btn btn-sm btn-outline-success" href="{{ url_for('main.issue_document', resident_id=resident.id, document_type_id=doc.document_type_id) }}">Issue Same</a>
+                {% endif %}
+                {% if not doc.is_archived and doc.status in ['draft', 'pending', 'approved'] %}
+                  <a class="btn btn-sm btn-primary" href="{{ url_for('main.edit_document', document_id=doc.id) }}">Edit</a>
+                {% endif %}
+                {% if not doc.is_archived and doc.status in ['draft', 'pending', 'approved'] %}
+                  <form method="POST" action="{{ url_for('main.finalize_document_issue', document_id=doc.id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-success">Issue</button>
+                  </form>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-muted p-3"><i class="fas fa-file-lines me-2"></i>No documents found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 
 {% include '_pagination.html' %}
+
+{% if recent_activity %}
+<div class="bdm-section-header mt-3">
+  <div>
+    <h3 class="bdm-section-title mb-0"><i class="fas fa-clock me-1"></i> Recent Activity</h3>
+    <p class="bdm-section-subtitle mb-0 text-muted">Audit trail for this resident.</p>
+  </div>
+</div>
+<div class="bdm-timeline mb-4">
+  {% for entry in recent_activity %}
+    <div class="bdm-timeline-item">
+      <div class="bdm-timeline-dot"></div>
+      <time>{{ entry.timestamp.strftime('%b %d, %Y %H:%M') if entry.timestamp else '' }}</time>
+      <h6>{{ entry.user.username if entry.user else 'System' }} {{ entry.action }}</h6>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
 {% endblock %}

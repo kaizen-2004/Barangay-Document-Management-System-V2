@@ -5,7 +5,7 @@
 <div class="bdm-section-header">
   <div class="bdm-section-subtitle">
       {{ document.document_type.name if document.document_type else 'Document' }} —
-      {{ document.resident.last_name }}, {{ document.resident.first_name }}
+      {{ document.resident.last_name|upper }}, {{ document.resident.first_name|upper }}
   </div>
   <div class="bdm-section-actions">
     <a class="btn btn-outline-secondary" href="{{ url_for('main.list_documents') }}">Back to Documents</a>
@@ -33,7 +33,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="4" class="text-muted p-3">No history entries yet.</td>
+          <td colspan="4" class="text-muted p-3"><i class="fas fa-clock me-2"></i>No history entries yet.</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -3,92 +3,201 @@
 <div class="bdm-form-card">
 <form method="POST">
     {{ form.hidden_tag() }}
-    <div class="form-group">
-        {{ form.resident_id.label(class="form-label") }}
-        {{ form.resident_id(class="form-control") }}
-        {% for error in form.resident_id.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="form-group">
-        {{ form.document_type_id.label(class="form-label") }}
-        {{ form.document_type_id(class="form-control") }}
-        {% for error in form.document_type_id.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="form-group">
-        {{ form.details.label(class="form-label", id="details-label") }}
-        {{ form.details(class="form-control", rows=4, placeholder="Details", id="details") }}
-        {% for error in form.details.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="form-group">
-        {{ form.issue_date.label(class="form-label") }}
-        {{ form.issue_date(class="form-control") }}
-        {% for error in form.issue_date.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
+    <div class="bdm-form-section mb-3">
+      <h3 class="bdm-form-section-title"><i class="fas fa-file-pen"></i> Document Details</h3>
+      <div class="bdm-form-grid">
+        <div class="form-group">
+            {{ form.resident_id.label(class="form-label") }}
+            {{ form.resident_id(class="form-select") }}
+            {% for error in form.resident_id.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            {{ form.document_type_id.label(class="form-label") }}
+            {{ form.document_type_id(class="form-select") }}
+            {% for error in form.document_type_id.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+            {{ form.details.label(class="form-label", id="details-label") }}
+            {{ form.details(class="form-control", rows=3, placeholder="Details", id="details", style="text-transform: uppercase") }}
+            {% for error in form.details.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group" style="max-width: 260px;">
+            {{ form.issue_date.label(class="form-label") }}
+            {{ form.issue_date(class="form-control") }}
+            {% for error in form.issue_date.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+      </div>
     </div>
 
-    <div id="custom-fields" class="bdm-form-section" style="display: none;">
-        <h3 class="bdm-form-section-title">Additional Information</h3>
+    <div id="custom-fields" class="bdm-form-section mb-3" style="display: none;">
+        <h3 class="bdm-form-section-title"><i class="fas fa-list"></i> Additional Information</h3>
         <div id="custom-fields-body" class="bdm-form-grid"></div>
         <div class="bdm-form-help mt-2">These fields change based on the selected document type.</div>
     </div>
 
-    <div class="card mt-3">
-        <div class="card-header">
-            <strong>Resident Photo</strong>
-            <div class="text-muted" style="font-size: .9rem">Capture from camera (no file uploads).</div>
+    <div class="bdm-camera-card mb-3">
+        <div class="bdm-camera-card-header">
+            <div>
+                <div class="bdm-camera-title"><i class="fas fa-camera me-1"></i> Resident Photo</div>
+                <div class="bdm-camera-subtitle">Capture, adjust, then process a white-background document photo.</div>
+            </div>
         </div>
-        <div class="card-body">
+        <div>
             {{ form.resident_photo_data(id="resident_photo_data") }}
-            <div class="row">
-                <div class="col" style="min-width: 260px">
+            <div class="bdm-camera-grid">
+                <div class="bdm-camera-panel">
+                    <div class="bdm-camera-panel-title">1. Camera</div>
                     <div class="bdm-camera-frame">
                         <video id="camVideo" autoplay playsinline></video>
                     </div>
-                    <div class="bdm-camera-actions mt-3">
-                        <button type="button" id="captureBtn" class="btn btn-primary">Capture Photo</button>
+                    <div class="bdm-camera-actions">
+                        <button type="button" id="startCamBtn" class="btn btn-outline-primary btn-sm">Start Camera</button>
+                        <button type="button" id="captureBtn" class="btn btn-primary btn-sm" disabled>Capture Photo</button>
+                        <button type="button" id="retakeBtn" class="btn btn-outline-secondary btn-sm" disabled>Retake</button>
+                        <button type="button" id="usePhotoBtn" class="btn btn-success btn-sm" disabled>Remove Background</button>
                     </div>
+                    <small id="document_camera_status" class="text-muted d-block mt-2"></small>
                     <small class="text-muted d-block" style="margin-top: .5rem">
                         Tip: This photo will be saved to the selected resident (used for ID/certificates that require a photo).
                     </small>
                 </div>
-                <div class="col" style="min-width: 260px">
-                    <div class="text-muted" style="margin-bottom: .5rem">Preview</div>
+                <div class="bdm-camera-panel">
+                    <div class="bdm-camera-panel-title">2. Captured Preview</div>
                     <div class="bdm-camera-frame">
-                        <img id="photoPreview" alt="Preview" style="display: none;" />
+                        <img id="capturedPhotoPreview" alt="Captured preview" style="display: none;" />
                     </div>
+                    <div class="bdm-crop-controls">
+                      <label for="documentCropZoom">Crop / Zoom</label>
+                      <input type="range" id="documentCropZoom" class="form-range" min="1" max="2.5" step="0.05" value="1.2" disabled>
+                      <label for="documentCropX">Move Left / Right</label>
+                      <input type="range" id="documentCropX" class="form-range" min="-1" max="1" step="0.02" value="0" disabled>
+                      <label for="documentCropY">Move Up / Down</label>
+                      <input type="range" id="documentCropY" class="form-range" min="-1" max="1" step="0.02" value="0" disabled>
+                      <label for="documentRemovalLevel">Background Removal</label>
+                      <input type="range" id="documentRemovalLevel" class="form-range" min="1" max="3" step="1" value="2" disabled>
+                      <div class="d-flex justify-content-between">
+                        <small class="text-muted">Gentle</small>
+                        <small class="text-muted">Normal</small>
+                        <small class="text-muted">Strong</small>
+                      </div>
+                    </div>
+                    <small class="text-muted d-block mt-2">Review this raw capture before processing.</small>
+                </div>
+                <div class="bdm-camera-panel">
+                    <div class="bdm-camera-panel-title">3. Processed Preview</div>
+                    <div class="bdm-camera-frame">
+                        <img id="photoPreview" alt="Processed preview" style="display: none;" />
+                        <div id="photoPreviewEmpty" class="bdm-camera-empty">No saved photo</div>
+                    </div>
+                    <small class="text-muted d-block mt-2">This shows the selected resident's saved photo. Retake only if it needs updating.</small>
                 </div>
             </div>
         </div>
     </div>
     <div class="bdm-form-actions">
+        {% if document and document.generation_status == "failed" %}
+        <div class="alert alert-danger py-2 mb-3 d-flex align-items-center gap-2">
+          <i class="fas fa-circle-exclamation"></i>
+          <span>Generation failed: {{ document.generation_error or "Unknown error" }}</span>
+        </div>
+        {% elif document and document.generation_status == "ready" %}
+        <div class="alert alert-success py-2 mb-3 d-flex align-items-center gap-2">
+          <i class="fas fa-check-circle"></i>
+          <span>Document generated successfully.</span>
+          {% if document.file_path %}
+          <a class="btn btn-sm btn-outline-success ms-auto" href="{{ url_for('main.download_document_pdf', document_id=document.id) }}" target="_blank">Download PDF</a>
+          {% endif %}
+        </div>
+        {% endif %}
         <button type="submit" class="btn btn-primary">{{ form.submit.label.text }}</button>
     </div>
 </form>
 </div>
 
+{% if document and doc_history %}
+<div class="bdm-section-header mt-4">
+  <div>
+    <h3 class="bdm-section-title mb-0"><i class="fas fa-clock me-1"></i> Document History</h3>
+    <p class="bdm-section-subtitle mb-0 text-muted">All changes and actions for this document.</p>
+  </div>
+</div>
+<div class="bdm-timeline mb-4">
+  {% for entry in doc_history %}
+    <div class="bdm-timeline-item">
+      <div class="bdm-timeline-dot"></div>
+      <time>{{ entry.timestamp.strftime('%b %d, %Y %H:%M') if entry.timestamp else '' }}</time>
+      <h6>{{ entry.user.username if entry.user else 'System' }} {{ entry.action }}</h6>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <script>
 (function() {
   const video = document.getElementById('camVideo');
+  const startCamBtn = document.getElementById('startCamBtn');
   const captureBtn = document.getElementById('captureBtn');
+  const retakeBtn = document.getElementById('retakeBtn');
+  const usePhotoBtn = document.getElementById('usePhotoBtn');
+  const capturedPreview = document.getElementById('capturedPhotoPreview');
   const preview = document.getElementById('photoPreview');
   const hidden = document.getElementById('resident_photo_data');
+  const cameraStatus = document.getElementById('document_camera_status');
+  const cropZoom = document.getElementById('documentCropZoom');
+  const cropX = document.getElementById('documentCropX');
+  const cropY = document.getElementById('documentCropY');
+  const removalLevel = document.getElementById('documentRemovalLevel');
   if (!video || !captureBtn || !hidden) return;
+  let stream = null;
+  let capturedDataUrl = '';
+  let rawCapturedDataUrl = '';
+  let cropImage = null;
+  let currentOriginalPath = '';
+  let currentProcessedPath = '';
+  let currentProcessedSaved = false;
+  let processing = false;
+  let formSubmitting = false;
+  const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+  const form = document.querySelector('form');
+
+  function setCameraStatus(message, isError = false) {
+    if (!cameraStatus) return;
+    cameraStatus.textContent = message || '';
+    cameraStatus.classList.toggle('text-danger', isError);
+    cameraStatus.classList.toggle('text-muted', !isError);
+  }
 
   async function startCam() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       video.srcObject = stream;
+      captureBtn.disabled = false;
+      if (startCamBtn) startCamBtn.disabled = true;
+      setCameraStatus('Camera ready. Capture a clear front-facing photo.');
     } catch (e) {
       console.warn('Camera unavailable:', e);
       captureBtn.disabled = true;
       captureBtn.textContent = 'Camera unavailable';
+      setCameraStatus('Unable to access camera. Please allow camera permission in your browser.', true);
     }
+  }
+
+  function stopCam() {
+    if (stream) {
+      stream.getTracks().forEach(function(t) { t.stop(); });
+      stream = null;
+    }
+    video.srcObject = null;
+    captureBtn.disabled = true;
+    if (startCamBtn) startCamBtn.disabled = false;
   }
 
   captureBtn.addEventListener('click', () => {
@@ -105,27 +214,186 @@
     const sy = Math.floor((srcH - side) / 2);
     ctx.drawImage(video, sx, sy, side, side, 0, 0, targetSize, targetSize);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-    hidden.value = dataUrl;
+    rawCapturedDataUrl = dataUrl;
+    cropImage = new Image();
+    cropImage.onload = renderCropPreview;
+    cropImage.src = dataUrl;
+    cropZoom.disabled = false;
+    cropX.disabled = false;
+    cropY.disabled = false;
+    cropZoom.value = '1.2';
+    cropX.value = '0';
+    cropY.value = '0';
+    removalLevel.disabled = false;
+    hidden.value = '';
     if (preview) {
-      preview.src = dataUrl;
-      preview.style.display = 'block';
+      preview.removeAttribute('src');
+      preview.style.display = 'none';
+    }
+    retakeBtn.disabled = false;
+    usePhotoBtn.disabled = false;
+    setCameraStatus('Photo captured. Review it, then click Remove Background if it looks good.');
+  });
+
+  retakeBtn?.addEventListener('click', () => {
+    cleanupCurrentCapture();
+    capturedDataUrl = '';
+    rawCapturedDataUrl = '';
+    cropImage = null;
+    hidden.value = '';
+    capturedPreview?.removeAttribute('src');
+    if (capturedPreview) capturedPreview.style.display = 'none';
+    preview?.removeAttribute('src');
+    if (preview) preview.style.display = 'none';
+    cropZoom.disabled = true;
+    cropX.disabled = true;
+    cropY.disabled = true;
+    removalLevel.disabled = true;
+    retakeBtn.disabled = true;
+    usePhotoBtn.disabled = true;
+    setCameraStatus('Retake the photo when ready.');
+  });
+
+  function renderCropPreview() {
+    if (!cropImage || !cropImage.naturalWidth || !cropImage.naturalHeight) return;
+    const canvas = document.createElement('canvas');
+    const targetSize = 700;
+    canvas.width = targetSize;
+    canvas.height = targetSize;
+    const ctx = canvas.getContext('2d');
+    const zoom = Number(cropZoom.value || 1);
+    const sourceSide = Math.min(cropImage.naturalWidth, cropImage.naturalHeight) / zoom;
+    const maxX = Math.max(0, cropImage.naturalWidth - sourceSide);
+    const maxY = Math.max(0, cropImage.naturalHeight - sourceSide);
+    const sx = Math.max(0, Math.min(maxX, (maxX / 2) + Number(cropX.value || 0) * (maxX / 2)));
+    const sy = Math.max(0, Math.min(maxY, (maxY / 2) + Number(cropY.value || 0) * (maxY / 2)));
+    ctx.drawImage(cropImage, sx, sy, sourceSide, sourceSide, 0, 0, targetSize, targetSize);
+    capturedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    if (capturedPreview) {
+      capturedPreview.src = capturedDataUrl;
+      capturedPreview.style.display = 'block';
+    }
+  }
+
+  function cleanupCurrentCapture(keepalive = false) {
+    const paths = [currentOriginalPath, currentProcessedPath].filter(Boolean);
+    const cleanupPaths = currentProcessedSaved ? [currentOriginalPath].filter(Boolean) : paths;
+    if (!cleanupPaths.length) return;
+    currentOriginalPath = '';
+    currentProcessedPath = '';
+    currentProcessedSaved = false;
+    fetch('{{ url_for("main.capture_cleanup_photo") }}', {
+      method: 'POST',
+      keepalive,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+      },
+      body: JSON.stringify({ paths: cleanupPaths }),
+    }).catch((e) => console.warn('Cleanup failed:', e));
+  }
+
+  usePhotoBtn?.addEventListener('click', async () => {
+    if (processing || !capturedDataUrl) return;
+    processing = true;
+    usePhotoBtn.disabled = true;
+    setCameraStatus('Removing background. Please wait...');
+    try {
+      const body = { image_data: capturedDataUrl, removal_level: Number(removalLevel.value) || 2 };
+      if (currentOriginalPath && currentProcessedPath) {
+        body.original_path = currentOriginalPath;
+        body.processed_path = currentProcessedPath;
+      } else {
+        body.resident_id = document.getElementById('resident_id')?.value || null;
+      }
+      const response = await fetch('{{ url_for("main.capture_process_photo") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'Photo processing failed.');
+      currentOriginalPath = payload.original_image_path || '';
+      currentProcessedPath = payload.processed_image_path || '';
+      currentProcessedSaved = Boolean(payload.resident_photo_saved);
+      hidden.value = payload.resident_photo_path || payload.processed_image_path;
+      if (preview) {
+        preview.src = (payload.resident_photo_url || payload.processed_image_url);
+        preview.style.display = 'block';
+      }
+      const resId = residentSelect?.value;
+      if (resId && payload.resident_photo_path) {
+        residentPhotos[resId] = {
+          path: payload.resident_photo_path,
+          url: payload.resident_photo_url || payload.processed_image_url,
+        };
+      }
+      setCameraStatus(payload.warning || 'Background removed. Adjust crop/zoom and click Remove Background again if needed.');
+    } catch (err) {
+      console.error(err);
+      setCameraStatus(err.message || 'Background removal failed. Please retake the photo.', true);
+    } finally {
+      processing = false;
+      usePhotoBtn.disabled = false;
     }
   });
 
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    startCam();
-  } else {
-    captureBtn.disabled = true;
-    captureBtn.textContent = 'Camera not supported';
+  if (startCamBtn) {
+    startCamBtn.addEventListener('click', startCam);
   }
 
+  cropZoom?.addEventListener('input', renderCropPreview);
+  cropX?.addEventListener('input', renderCropPreview);
+  cropY?.addEventListener('input', renderCropPreview);
+
+  form?.addEventListener('submit', (e) => {
+    if (processing) {
+      e.preventDefault();
+      setCameraStatus('Please wait for background removal to finish.', true);
+      return;
+    }
+    formSubmitting = true;
+  });
+
+  window.addEventListener('beforeunload', () => {
+    stopCam();
+    if (!formSubmitting) cleanupCurrentCapture(true);
+  });
+
   const docTypeSelect = document.getElementById('document_type_id');
+  const residentSelect = document.getElementById('resident_id');
   const detailsLabel = document.getElementById('details-label');
   const detailsField = document.getElementById('details');
   const customFieldsWrap = document.getElementById('custom-fields');
   const customFieldsBody = document.getElementById('custom-fields-body');
   const fieldConfigs = {{ document_type_field_configs | default({}) | tojson }};
   const existingValues = {{ custom_field_values | default({}) | tojson }};
+  const residentValues = {{ resident_field_values | default({}) | tojson }};
+  const residentPhotos = {{ resident_photo_values | default({}) | tojson }};
+  const residentFieldCache = {};
+  const photoPreviewEmpty = document.getElementById('photoPreviewEmpty');
+
+  function updateResidentPhotoPreview() {
+    const photo = residentPhotos[residentSelect?.value] || {};
+    if (photo.url) {
+      hidden.value = photo.path || '';
+      if (preview) {
+        preview.src = photo.url;
+        preview.style.display = 'block';
+      }
+      if (photoPreviewEmpty) photoPreviewEmpty.style.display = 'none';
+      setCameraStatus("Using the selected resident's saved photo. Retake only if it needs updating.");
+    } else {
+      hidden.value = '';
+      preview?.removeAttribute('src');
+      if (preview) preview.style.display = 'none';
+      if (photoPreviewEmpty) photoPreviewEmpty.style.display = 'flex';
+      setCameraStatus('No saved photo for this resident. Capture and process one before issuing photo-required documents.');
+    }
+  }
 
   function updateDetailsLabel() {
     if (!docTypeSelect || !detailsLabel || !detailsField) return;
@@ -151,7 +419,11 @@
       const name = String(field.name || '').trim();
       if (!name) return;
       const id = `field_${name}`;
-      const value = existingValues[id] ?? existingValues[name] ?? '';
+      const selectedResidentValues = residentFieldCache[residentSelect?.value] || residentValues[residentSelect?.value] || {};
+      const existingValue = existingValues[id] ?? existingValues[name] ?? '';
+      const profileValue = selectedResidentValues[name] || '';
+      const value = existingValue || profileValue;
+      const fromProfile = !existingValue && Boolean(profileValue);
       const group = document.createElement('div');
       group.className = 'form-group';
 
@@ -178,10 +450,20 @@
       input.name = id;
       input.id = id;
       input.value = value;
+      if (fromProfile) {
+        input.readOnly = true;
+        input.classList.add('bg-light');
+      }
       if (field.required) input.required = true;
 
       group.appendChild(label);
       group.appendChild(input);
+      if (fromProfile) {
+        const help = document.createElement('div');
+        help.className = 'form-text';
+        help.textContent = 'Auto-filled from resident profile.';
+        group.appendChild(help);
+      }
       customFieldsBody.appendChild(group);
     });
   }
@@ -189,6 +471,27 @@
   if (docTypeSelect) {
     renderCustomFields();
     docTypeSelect.addEventListener('change', renderCustomFields);
+  }
+  residentSelect?.addEventListener('change', () => {
+    renderCustomFields();
+    updateResidentPhotoPreview();
+    fetchFreshResidentValues();
+  });
+  updateResidentPhotoPreview();
+
+  async function fetchFreshResidentValues() {
+    const id = residentSelect?.value;
+    if (!id) return;
+    try {
+      const resp = await fetch(`/api/residents/${id}/field-values`);
+      const data = await resp.json();
+      if (data.success) {
+        residentFieldCache[id] = data.values;
+        renderCustomFields();
+      }
+    } catch (e) {
+      console.warn('Failed to fetch fresh resident values:', e);
+    }
   }
 })();
 </script>

@@ -18,6 +18,16 @@
     <button type="submit" class="btn btn-danger btn-sm" id="bulk-archive-docs-btn" disabled>Archive Selected</button>
   </form>
 {% endif %}
+{% if archived_view and documents %}
+  <form id="bulk-restore-docs" method="post" action="{{ url_for('main.bulk_restore_documents') }}" class="mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-success btn-sm" id="bulk-restore-docs-btn" disabled>Restore Selected</button>
+  </form>
+  <form id="bulk-purge-docs" method="post" action="{{ url_for('main.bulk_purge_documents') }}" class="mb-3" data-confirm="Permanently delete selected archived documents? This cannot be undone.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-danger btn-sm" id="bulk-purge-docs-btn" disabled>Delete Selected</button>
+  </form>
+{% endif %}
 
 <form method="get" action="{{ url_for('main.list_archived_documents') if archived_view else url_for('main.list_documents') }}" class="bdm-filter-card mb-3">
   <div class="filter-bar d-flex flex-lg-nowrap flex-wrap gap-2 align-items-end">
@@ -86,6 +96,10 @@
               <th class="text-center" style="width: 32px;">
                 <input class="form-check-input" type="checkbox" id="select-all-docs" aria-label="Select all documents">
               </th>
+            {% else %}
+              <th class="text-center" style="width: 32px;">
+                <input class="form-check-input" type="checkbox" id="select-all-archived-docs" aria-label="Select all archived documents">
+              </th>
             {% endif %}
             <th>Resident</th>
             <th>Document Type</th>
@@ -103,10 +117,14 @@
               <td class="text-center">
                 <input class="form-check-input doc-select" type="checkbox" name="document_ids" value="{{ doc.id }}" form="bulk-archive-docs" aria-label="Select document {{ doc.id }}">
               </td>
+            {% else %}
+              <td class="text-center">
+                <input class="form-check-input doc-archived-select" type="checkbox" name="document_ids" value="{{ doc.id }}" form="bulk-restore-docs" aria-label="Select document {{ doc.id }}">
+              </td>
             {% endif %}
             <td>
               <a href="{{ url_for('main.resident_profile', resident_id=doc.resident_id) }}" class="text-decoration-none">
-                {{ doc.resident.last_name }}, {{ doc.resident.first_name }}
+                {{ doc.resident.last_name|upper }}, {{ doc.resident.first_name|upper }}
               </a>
             </td>
             <td>{{ doc.document_type.name }}</td>
@@ -115,7 +133,7 @@
             <td>
               {% set last_at = doc.updated_at or doc.issued_at or doc.created_at %}
               {% set last_user_id = doc.updated_by_id or doc.issued_by_id or doc.created_by_id %}
-              <div class="small">{{ last_at.strftime('%Y-%m-%d %H:%M') if last_at else '—' }}</div>
+              <div class="small">{{ last_at|local_datetime }}</div>
               <div class="small text-muted">{{ user_map.get(last_user_id, '—') }}</div>
             </td>
             <td>
@@ -153,6 +171,10 @@
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-sm btn-outline-secondary">Restore</button>
                         </form>
+                        <form method="POST" action="{{ url_for('main.purge_document', document_id=doc.id) }}" class="d-inline" data-confirm="Permanently delete this document? This cannot be undone.">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
                     {% endif %}
                   </div>
                   {% if not doc.is_archived %}
@@ -180,7 +202,7 @@
 </div>
 </div>
 {% else %}
-<div class="bdm-empty-state">No documents found.</div>
+<div class="bdm-empty-state-icon"><i class="fas fa-file-lines"></i><span>No documents found.</span></div>
 {% endif %}
 {% include '_pagination.html' %}
 
@@ -194,6 +216,30 @@
 
   function syncButton() {
     bulkBtn.disabled = !Array.from(selects).some(cb => cb.checked);
+  }
+
+  selectAll.addEventListener('change', () => {
+    selects.forEach(cb => { cb.checked = selectAll.checked; });
+    syncButton();
+  });
+
+  selects.forEach(cb => cb.addEventListener('change', syncButton));
+})();
+</script>
+{% endif %}
+{% if archived_view and documents %}
+<script>
+(() => {
+  const selectAll = document.getElementById('select-all-archived-docs');
+  const selects = document.querySelectorAll('.doc-archived-select');
+  const restoreBtn = document.getElementById('bulk-restore-docs-btn');
+  const purgeBtn = document.getElementById('bulk-purge-docs-btn');
+  if (!selectAll || !selects.length || (!restoreBtn && !purgeBtn)) return;
+
+  function syncButton() {
+    const hasChecked = Array.from(selects).some(cb => cb.checked);
+    if (restoreBtn) restoreBtn.disabled = !hasChecked;
+    if (purgeBtn) purgeBtn.disabled = !hasChecked;
   }
 
   selectAll.addEventListener('change', () => {

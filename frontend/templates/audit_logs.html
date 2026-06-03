@@ -4,7 +4,7 @@
 {% import "_log_helpers.html" as loghelpers %}
 {% block content %}
 <div class="bdm-section-header">
-  <div class="bdm-section-subtitle">Plain-language activity history (sign-ins, edits, prints, exports).</div>
+  <div class="bdm-section-subtitle"><i class="fas fa-clock-rotate-left me-1"></i> Plain-language activity history (sign-ins, edits, prints, exports).</div>
   <div class="bdm-section-actions">
     <form method="get" class="d-flex flex-wrap gap-2">
       <input class="form-control" name="q" value="{{ q }}" placeholder="Search action or user">
@@ -33,7 +33,7 @@
           <td class="small text-muted">{{ loghelpers.pretty_entity(l.entity_type, l.entity_id) or '—' }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="4" class="text-muted p-3">No logs yet.</td></tr>
+        <tr><td colspan="4" class="text-muted p-3"><i class="fas fa-clock me-2"></i>No logs yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

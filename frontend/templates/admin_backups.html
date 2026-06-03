@@ -2,14 +2,45 @@
 {% block content %}
 <div class="bdm-section-header">
   <div>
-    <p class="bdm-section-subtitle mb-0">Create and restore full database snapshots.</p>
-    <p class="bdm-section-subtitle mb-0">Current database size: {{ db_size_label }}</p>
+    <p class="bdm-section-subtitle mb-0"><i class="fas fa-database me-1"></i> Create and restore full database snapshots.</p>
   </div>
   <div class="bdm-section-actions">
     <form method="post" action="{{ url_for('admin.create_backup') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-primary">Create Backup</button>
+      <button type="submit" class="btn btn-primary"><i class="fas fa-floppy-disk"></i> Create Backup</button>
     </form>
+  </div>
+</div>
+
+{# System Health #}
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="bdm-metric-card h-100">
+      <div class="bdm-metric-icon"><i class="fas fa-database"></i></div>
+      <div class="bdm-metric-value">{{ db_size_label }}</div>
+      <div class="bdm-metric-label">Database Size</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="bdm-metric-card h-100">
+      <div class="bdm-metric-icon"><i class="fas fa-hard-drive"></i></div>
+      <div class="bdm-metric-value">{{ disk_free }}</div>
+      <div class="bdm-metric-label">Free Disk Space</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="bdm-metric-card h-100">
+      <div class="bdm-metric-icon"><i class="fas fa-archive"></i></div>
+      <div class="bdm-metric-value">{{ backup_count }}</div>
+      <div class="bdm-metric-label">Backup Files</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="bdm-metric-card h-100">
+      <div class="bdm-metric-icon"><i class="fas fa-clock"></i></div>
+      <div class="bdm-metric-value">{{ latest_backup.mtime.strftime('%b %d, %Y') if latest_backup else '—' }}</div>
+      <div class="bdm-metric-label">Latest Backup</div>
+    </div>
   </div>
 </div>
 
@@ -36,7 +67,7 @@
 
 <div class="card mb-3">
   <div class="card-header bg-transparent">
-    <div class="fw-semibold">Restore from Backup</div>
+    <div class="fw-semibold"><i class="fas fa-rotate-left me-1"></i> Restore from Backup</div>
     <div class="text-muted small">Choose an existing backup or upload a file.</div>
   </div>
   <div class="card-body">
@@ -63,8 +94,8 @@
 </div>
 
 <div class="bdm-table-card">
-  <div class="card-header bg-transparent">
-    <div class="fw-semibold">Available Backups</div>
+  <div class="bdm-table-toolbar px-3 pt-3">
+    <div class="bdm-table-title"><i class="fas fa-database me-1"></i> Available Backups</div>
     <div class="text-muted small">Stored in {{ backup_dir }}</div>
   </div>
   <div class="p-0">
@@ -85,17 +116,21 @@
             <td>{{ b.mtime.strftime('%Y-%m-%d %H:%M') }}</td>
             <td>{{ (b.size / 1024 / 1024) | round(2) }} MB</td>
             <td class="text-nowrap">
-              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.download_backup', filename=b.name) }}">Download</a>
-              <form method="post" action="{{ url_for('admin.restore_backup') }}" class="d-inline">
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.download_backup', filename=b.name) }}" title="Download"><i class="fas fa-download"></i></a>
+              <form method="post" action="{{ url_for('admin.restore_backup') }}" class="d-inline" style="vertical-align: middle;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="filename" value="{{ b.name }}">
-                <button type="submit" class="btn btn-sm btn-outline-danger">Restore</button>
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Restore"><i class="fas fa-rotate-left"></i></button>
+              </form>
+              <form method="post" action="{{ url_for('admin.delete_backup', filename=b.name) }}" class="d-inline" data-confirm="Delete this backup file? This cannot be undone.">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-dark" title="Delete"><i class="fas fa-trash-can"></i></button>
               </form>
             </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="4" class="text-muted p-3">No backups yet.</td>
+            <td colspan="4" class="text-muted p-3"><i class="fas fa-database me-2"></i>No backups yet.</td>
           </tr>
           {% endfor %}
         </tbody>

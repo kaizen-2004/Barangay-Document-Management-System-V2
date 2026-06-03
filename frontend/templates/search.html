@@ -7,8 +7,144 @@
       Found {{ residents_count }} resident{{ '' if residents_count == 1 else 's' }} and {{ documents_count }} document{{ '' if documents_count == 1 else 's' }}.
       Showing up to {{ residents_results|length }} residents and {{ documents_results|length }} documents.
     </div>
-  {% elif pagination %}
-    <div class="text-muted small mb-2">Found {{ pagination.total }} result{{ '' if pagination.total == 1 else 's' }}.</div>
+
+    <div class="mb-3">
+      <div class="bdm-search-card-header">
+        <div class="fw-semibold"><i class="fas fa-users me-1"></i> Residents</div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.list_residents', q=q) }}">View all</a>
+      </div>
+      <div class="bdm-search-card-body">
+        {% if residents_results %}
+          <div class="d-flex flex-column gap-2">
+            {% for r in residents_results %}
+            <a href="{{ url_for('main.resident_profile', resident_id=r.id) }}" class="text-decoration-none text-reset d-flex align-items-center gap-3 p-2 rounded bdm-search-result-link">
+              <span class="bdm-avatar-initials" style="background: {% if r.gender == 'Female' %}#7f1d1d{% else %}#1e40af{% endif %}; width: 40px; height: 40px; font-size: 1rem;">
+                {{ r.first_name[:1] }}{{ r.last_name[:1] }}
+              </span>
+              <div class="flex-grow-1 min-width-0">
+                <div class="fw-semibold">{{ r.last_name|upper }}, {{ r.first_name|upper }} {% if r.middle_name %}{{ r.middle_name[0]|upper }}.{% endif %}</div>
+                <div class="small text-muted text-truncate">{{ r.barangay_id or '—' }} · {{ r.full_address }}</div>
+              </div>
+              {% if r.is_archived %}
+                <span class="bdm-status bdm-status-archived">Archived</span>
+              {% else %}
+                <span class="bdm-status bdm-status-active">Active</span>
+              {% endif %}
+              <i class="fas fa-chevron-right text-muted"></i>
+            </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="bdm-empty-state-icon"><i class="fas fa-users"></i><span>No residents found.</span></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <div class="bdm-search-card-header">
+        <div class="fw-semibold"><i class="fas fa-file-lines me-1"></i> Documents</div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.list_documents', q=q, status=status, type=type_id) }}">View all</a>
+      </div>
+      <div class="bdm-search-card-body">
+        {% if documents_results %}
+          <div class="d-flex flex-column gap-2">
+            {% for doc in documents_results %}
+            <div class="d-flex align-items-center gap-3 p-2 rounded">
+              <span class="bdm-avatar-initials" style="background: #475569; width: 40px; height: 40px; font-size: 1rem;">
+                <i class="fas fa-file"></i>
+              </span>
+              <div class="flex-grow-1 min-width-0">
+                <div>
+                  <a href="{{ url_for('main.document_history', document_id=doc.id) }}" class="fw-semibold text-decoration-none">{{ doc.document_type.name if doc.document_type else 'Document' }}</a>
+                  <span class="text-muted">—</span>
+                  <a href="{{ url_for('main.resident_profile', resident_id=doc.resident_id) }}" class="text-decoration-none">{{ doc.resident.last_name|upper }}, {{ doc.resident.first_name|upper }}</a>
+                </div>
+                <div class="small text-muted text-truncate">{{ doc.issue_date.strftime('%Y-%m-%d') if doc.issue_date else '—' }} · {{ doc.details or '' }}</div>
+              </div>
+              {% if doc.is_archived %}
+                <span class="bdm-status bdm-status-archived">Archived</span>
+              {% elif doc.status in ['draft', 'pending', 'approved'] %}
+                <span class="bdm-status bdm-status-draft">Draft</span>
+              {% else %}
+                <span class="bdm-status bdm-status-issued">Issued</span>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="bdm-empty-state-icon"><i class="fas fa-file-lines"></i><span>No documents found.</span></div>
+        {% endif %}
+      </div>
+    </div>
+  {% elif scope == 'documents' %}
+    <div class="bdm-search-card">
+      <div class="bdm-search-card-header">
+        <div class="fw-semibold"><i class="fas fa-file-lines me-1"></i> Documents</div>
+        <div class="small text-muted">{{ pagination.total }} result{{ '' if pagination.total == 1 else 's' }}</div>
+      </div>
+      <div class="bdm-search-card-body">
+        {% if results %}
+          <div class="d-flex flex-column gap-2">
+            {% for doc in results %}
+            <div class="d-flex align-items-center gap-3 p-2 rounded">
+              <span class="bdm-avatar-initials" style="background: #475569; width: 40px; height: 40px; font-size: 1rem;">
+                <i class="fas fa-file"></i>
+              </span>
+              <div class="flex-grow-1 min-width-0">
+                <div>
+                  <a href="{{ url_for('main.document_history', document_id=doc.id) }}" class="fw-semibold text-decoration-none">{{ doc.document_type.name if doc.document_type else 'Document' }}</a>
+                  <span class="text-muted">—</span>
+                  <a href="{{ url_for('main.resident_profile', resident_id=doc.resident_id) }}" class="text-decoration-none">{{ doc.resident.last_name|upper }}, {{ doc.resident.first_name|upper }}</a>
+                </div>
+                <div class="small text-muted text-truncate">{{ doc.issue_date.strftime('%Y-%m-%d') if doc.issue_date else '—' }} · {{ doc.details or '' }}</div>
+              </div>
+              {% if doc.is_archived %}
+                <span class="bdm-status bdm-status-archived">Archived</span>
+              {% elif doc.status in ['draft', 'pending', 'approved'] %}
+                <span class="bdm-status bdm-status-draft">Draft</span>
+              {% else %}
+                <span class="bdm-status bdm-status-issued">Issued</span>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="bdm-empty-state-icon"><i class="fas fa-file-lines"></i><span>No documents found.</span></div>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="bdm-search-card">
+      <div class="bdm-search-card-header">
+        <div class="fw-semibold"><i class="fas fa-users me-1"></i> Residents</div>
+        <div class="small text-muted">{{ pagination.total }} result{{ '' if pagination.total == 1 else 's' }}</div>
+      </div>
+      <div class="bdm-search-card-body">
+        {% if results %}
+          <div class="d-flex flex-column gap-2">
+            {% for r in results %}
+            <a href="{{ url_for('main.resident_profile', resident_id=r.id) }}" class="text-decoration-none text-reset d-flex align-items-center gap-3 p-2 rounded bdm-search-result-link">
+              <span class="bdm-avatar-initials" style="background: {% if r.gender == 'Female' %}#7f1d1d{% else %}#1e40af{% endif %}; width: 40px; height: 40px; font-size: 1rem;">
+                {{ r.first_name[:1] }}{{ r.last_name[:1] }}
+              </span>
+              <div class="flex-grow-1 min-width-0">
+                <div class="fw-semibold">{{ r.last_name|upper }}, {{ r.first_name|upper }} {% if r.middle_name %}{{ r.middle_name[0]|upper }}.{% endif %}</div>
+                <div class="small text-muted text-truncate">{{ r.barangay_id or '—' }} · {{ r.full_address }}</div>
+              </div>
+              {% if r.is_archived %}
+                <span class="bdm-status bdm-status-archived">Archived</span>
+              {% else %}
+                <span class="bdm-status bdm-status-active">Active</span>
+              {% endif %}
+              <i class="fas fa-chevron-right text-muted"></i>
+            </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="bdm-empty-state-icon"><i class="fas fa-users"></i><span>No residents found.</span></div>
+        {% endif %}
+      </div>
+    </div>
   {% endif %}
 {% endif %}
 
@@ -82,10 +218,10 @@
                 <td>{{ r.barangay_id or '—' }}</td>
                 <td>
                   <a href="{{ url_for('main.resident_profile', resident_id=r.id) }}" class="text-decoration-none">
-                    {{ r.last_name }}, {{ r.first_name }}
+                    {{ r.last_name|upper }}, {{ r.first_name|upper }}
                   </a>
                 </td>
-                <td>{{ r.address }}</td>
+                <td>{{ r.full_address }}</td>
                 <td>
                   {% if r.is_archived %}
                     <span class="badge bg-secondary">Archived</span>
@@ -95,7 +231,7 @@
                 </td>
               </tr>
               {% else %}
-              <tr><td colspan="5" class="text-muted p-3">No residents found.</td></tr>
+              <tr><td colspan="5" class="text-muted p-3"><i class="fas fa-users me-2"></i>No residents found.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -126,7 +262,7 @@
                 <td>{{ doc.id }}</td>
                 <td>
                   <a href="{{ url_for('main.resident_profile', resident_id=doc.resident_id) }}" class="text-decoration-none">
-                    {{ doc.resident.last_name }}, {{ doc.resident.first_name }}
+                    {{ doc.resident.last_name|upper }}, {{ doc.resident.first_name|upper }}
                   </a>
                 </td>
                 <td>{{ doc.document_type.name if doc.document_type else '—' }}</td>
@@ -142,7 +278,7 @@
                 </td>
               </tr>
               {% else %}
-              <tr><td colspan="5" class="text-muted p-3">No documents found.</td></tr>
+              <tr><td colspan="5" class="text-muted p-3"><i class="fas fa-file-lines me-2"></i>No documents found.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -169,7 +305,7 @@
                 <td>{{ doc.id }}</td>
                 <td>
                   <a href="{{ url_for('main.resident_profile', resident_id=doc.resident_id) }}" class="text-decoration-none">
-                    {{ doc.resident.last_name }}, {{ doc.resident.first_name }}
+                    {{ doc.resident.last_name|upper }}, {{ doc.resident.first_name|upper }}
                   </a>
                 </td>
                 <td>{{ doc.document_type.name if doc.document_type else '—' }}</td>
@@ -185,7 +321,7 @@
                 </td>
               </tr>
               {% else %}
-              <tr><td colspan="5" class="text-muted p-3">No documents found.</td></tr>
+              <tr><td colspan="5" class="text-muted p-3"><i class="fas fa-file-lines me-2"></i>No documents found.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -213,10 +349,10 @@
                 <td>{{ r.barangay_id or '—' }}</td>
                 <td>
                   <a href="{{ url_for('main.resident_profile', resident_id=r.id) }}" class="text-decoration-none">
-                    {{ r.last_name }}, {{ r.first_name }}
+                    {{ r.last_name|upper }}, {{ r.first_name|upper }}
                   </a>
                 </td>
-                <td>{{ r.address }}</td>
+                <td>{{ r.full_address }}</td>
                 <td>
                   {% if r.is_archived %}
                     <span class="badge bg-secondary">Archived</span>
@@ -226,7 +362,7 @@
                 </td>
               </tr>
               {% else %}
-              <tr><td colspan="5" class="text-muted p-3">No residents found.</td></tr>
+              <tr><td colspan="5" class="text-muted p-3"><i class="fas fa-users me-2"></i>No residents found.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -239,7 +375,7 @@
     {% include '_pagination.html' %}
   {% endif %}
 {% else %}
-  <div class="bdm-empty-state">Enter a search term to get started.</div>
+  <div class="bdm-empty-state-icon"><i class="fas fa-magnifying-glass"></i><span>Enter a search term to get started.</span></div>
 {% endif %}
 
 <script>

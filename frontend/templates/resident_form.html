@@ -5,92 +5,186 @@
     {{ form.hidden_tag() }}
     {{ form.photo_data(id='photo_data') }}
 
-    <div class="mb-3">
-        <label class="form-label">Resident Photo (In-app Camera)</label>
-        <div class="card p-3">
-            <div class="d-flex flex-wrap gap-3 align-items-start">
-                <div>
+    <div class="bdm-camera-card mb-4">
+        <div class="bdm-camera-card-header">
+            <div>
+                <div class="bdm-camera-title"><i class="fas fa-camera me-1"></i> Resident Photo</div>
+                <div class="bdm-camera-subtitle">Capture, adjust, then process a white-background document photo.</div>
+            </div>
+        </div>
+        <div class="bdm-camera-grid">
+                <div class="bdm-camera-panel">
+                    <div class="bdm-camera-panel-title">1. Camera</div>
                     <div class="bdm-camera-frame">
                       <video id="cam_video" autoplay playsinline></video>
                       <canvas id="cam_canvas" class="d-none"></canvas>
                     </div>
-                    <div class="bdm-camera-actions mt-2">
+                    <div class="bdm-camera-actions">
                         <button type="button" id="btn_start" class="btn btn-outline-primary btn-sm">Start Camera</button>
-                        <button type="button" id="btn_capture" class="btn btn-primary btn-sm" disabled>Capture</button>
-                        <button type="button" id="btn_clear" class="btn btn-outline-secondary btn-sm" disabled>Clear</button>
+                        <button type="button" id="btn_capture" class="btn btn-primary btn-sm" disabled>Capture Photo</button>
+                        <button type="button" id="btn_retake" class="btn btn-outline-secondary btn-sm" disabled>Retake</button>
+                        <button type="button" id="btn_use_photo" class="btn btn-success btn-sm" disabled>Remove Background</button>
                     </div>
-                    <div class="form-text mt-2">Use the webcam to capture a photo inside the system. The captured image is saved locally on the server.</div>
+                    <div class="form-text mt-2">Capture a photo directly from the camera. The system will automatically center the face and convert the background to white for document use.</div>
+                    <div id="camera_status" class="form-text mt-2"></div>
                 </div>
 
-                <div>
-                    <div class="fw-semibold mb-1">Preview</div>
+                <div class="bdm-camera-panel">
+                    <div class="bdm-camera-panel-title">2. Captured Preview</div>
                     <div class="bdm-camera-frame">
-                      <img id="photo_preview" alt="Captured preview" />
+                      <img id="captured_preview" alt="Captured preview" />
                     </div>
-                    <div class="form-text mt-2">If you don’t see the camera, allow browser permissions.</div>
+                    <div class="bdm-crop-controls">
+                      <label for="crop_zoom">Crop / Zoom</label>
+                      <input type="range" id="crop_zoom" class="form-range" min="1" max="2.5" step="0.05" value="1.2" disabled>
+                      <label for="crop_x">Move Left / Right</label>
+                      <input type="range" id="crop_x" class="form-range" min="-1" max="1" step="0.02" value="0" disabled>
+                      <label for="crop_y">Move Up / Down</label>
+                      <input type="range" id="crop_y" class="form-range" min="-1" max="1" step="0.02" value="0" disabled>
+                      <label for="removal_level">Background Removal</label>
+                      <input type="range" id="removal_level" class="form-range" min="1" max="3" step="1" value="2" disabled>
+                      <div class="d-flex justify-content-between">
+                        <small class="text-muted">Gentle</small>
+                        <small class="text-muted">Normal</small>
+                        <small class="text-muted">Strong</small>
+                      </div>
+                    </div>
+                    <div class="form-text mt-2">Review this raw capture before processing.</div>
                 </div>
-            </div>
 
-            {# No file upload: photo is captured in-app via the webcam #}
+                <div class="bdm-camera-panel">
+                    <div class="bdm-camera-panel-title">3. Processed Preview</div>
+                    <div class="bdm-camera-frame">
+                      <img id="photo_preview" alt="Processed preview" />
+                    </div>
+                    <div class="form-text mt-2">This white-background photo is what will be saved.</div>
+                </div>
         </div>
     </div>
-<div class="form-group">
-        {{ form.barangay_id.label(class="form-label") }}
-        {{ form.barangay_id(class="form-control", placeholder="(Optional) Leave blank to auto-generate") }}
-        <div class="form-text">If left blank, the system will auto-generate a Barangay ID after saving.</div>
-        {% for error in form.barangay_id.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
+
+    <div class="bdm-form-section mb-3">
+      <h3 class="bdm-form-section-title"><i class="fas fa-address-card"></i> Personal Information</h3>
+      <div class="bdm-form-grid">
+        <div class="form-group" style="grid-column: 1 / -1;">
+            {{ form.barangay_id.label(class="form-label") }}
+            {{ form.barangay_id(class="form-control", placeholder="(Optional) Leave blank to auto-generate") }}
+            <div class="form-text">If left blank, the system will auto-generate a Barangay ID after saving.</div>
+            {% for error in form.barangay_id.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            {{ form.first_name.label(class="form-label") }}
+            {{ form.first_name(class="form-control", style="text-transform: uppercase") }}
+            {% for error in form.first_name.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            {{ form.middle_name.label(class="form-label") }}
+            {{ form.middle_name(class="form-control", style="text-transform: uppercase") }}
+            {% for error in form.middle_name.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            {{ form.last_name.label(class="form-label") }}
+            {{ form.last_name(class="form-control", style="text-transform: uppercase") }}
+            {% for error in form.last_name.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            {{ form.gender.label(class="form-label") }}
+            {{ form.gender(class="form-select") }}
+            {% for error in form.gender.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            {{ form.birth_date.label(class="form-label") }}
+            {{ form.birth_date(class="form-control", type="date") }}
+            {% for error in form.birth_date.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            {{ form.marital_status.label(class="form-label") }}
+            {{ form.marital_status(class="form-select") }}
+            {% for error in form.marital_status.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+      </div>
     </div>
-    <div class="form-group">
-        {{ form.first_name.label(class="form-label") }}
-        {{ form.first_name(class="form-control") }}
-        {% for error in form.first_name.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
+
+    <div class="bdm-form-section mb-3">
+      <h3 class="bdm-form-section-title"><i class="fas fa-location-dot"></i> Address</h3>
+      <div class="bdm-form-grid">
+        <div class="form-group">
+            {{ form.street_id.label(class="form-label") }}
+            {{ form.street_id(class="form-select") }}
+            {% for error in form.street_id.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+            <div class="form-text">Manage street options in Admin → Streets.</div>
+        </div>
+        <div class="form-group">
+            {{ form.address.label(class="form-label") }}
+            {{ form.address(class="form-control", style="text-transform: uppercase") }}
+            {% for error in form.address.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+      </div>
     </div>
-    <div class="form-group">
-        {{ form.middle_name.label(class="form-label") }}
-        {{ form.middle_name(class="form-control") }}
-        {% for error in form.middle_name.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
+
+    <div class="bdm-form-section mb-3">
+        <h3 class="bdm-form-section-title"><i class="fas fa-circle-info"></i> General Information for Documents</h3>
+        <div class="bdm-form-grid">
+            <div class="form-group">
+                {{ form.contact_number.label(class="form-label") }}
+                {{ form.contact_number(class="form-control", placeholder="0912-345-6789", style="text-transform: uppercase") }}
+                {% for error in form.contact_number.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="form-group">
+                {{ form.occupation.label(class="form-label") }}
+                {{ form.occupation(class="form-control", style="text-transform: uppercase") }}
+                {% for error in form.occupation.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="form-group">
+                {{ form.years_on_barangay.label(class="form-label") }}
+                {{ form.years_on_barangay(class="form-control", inputmode="numeric", style="text-transform: uppercase") }}
+                {% for error in form.years_on_barangay.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="form-group">
+                {{ form.emergency_contact_name.label(class="form-label") }}
+                {{ form.emergency_contact_name(class="form-control", style="text-transform: uppercase") }}
+                {% for error in form.emergency_contact_name.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="form-group">
+                {{ form.emergency_contact_relationship.label(class="form-label") }}
+                {{ form.emergency_contact_relationship(class="form-control", style="text-transform: uppercase") }}
+                {% for error in form.emergency_contact_relationship.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="form-group">
+                {{ form.emergency_contact_number.label(class="form-label") }}
+                {{ form.emergency_contact_number(class="form-control", placeholder="0912-345-6789", style="text-transform: uppercase") }}
+                {% for error in form.emergency_contact_number.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="form-group">
+                {{ form.emergency_contact_address.label(class="form-label") }}
+                {{ form.emergency_contact_address(class="form-control", id="emergency_contact_address", style="text-transform: uppercase") }}
+                <div class="form-check d-flex align-items-center gap-1 mt-1">
+                    {{ form.emergency_contact_same_address(class="form-check-input", id="emergency_contact_same_address") }}
+                    <label class="form-check-label" for="emergency_contact_same_address">Same address as resident</label>
+                </div>
+                {% for error in form.emergency_contact_address.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+        </div>
+        <div class="bdm-form-help">These values can auto-fill matching document placeholders later.</div>
     </div>
-    <div class="form-group">
-        {{ form.last_name.label(class="form-label") }}
-        {{ form.last_name(class="form-control") }}
-        {% for error in form.last_name.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="form-group">
-        {{ form.gender.label(class="form-label") }}
-        {{ form.gender(class="form-control") }}
-        {% for error in form.gender.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="form-group">
-        {{ form.birth_date.label(class="form-label") }}
-        {{ form.birth_date(class="form-control", type="date") }}
-        {% for error in form.birth_date.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="form-group">
-        {{ form.marital_status.label(class="form-label") }}
-        {{ form.marital_status(class="form-control") }}
-        {% for error in form.marital_status.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="form-group">
-        {{ form.address.label(class="form-label") }}
-        {{ form.address(class="form-control") }}
-        {% for error in form.address.errors %}
-            <div class="text-danger small">{{ error }}</div>
-        {% endfor %}
-    </div>
+
     <div class="bdm-form-actions">
         <button type="submit" class="btn btn-primary">{{ form.submit.label.text }}</button>
     </div>
@@ -99,16 +193,61 @@
 
 <script>
 (() => {
+  // Emergency contact same-address toggle
+  const ecAddrField = document.getElementById('emergency_contact_address');
+  const ecSameCheck = document.getElementById('emergency_contact_same_address');
+  function toggleEcAddr() {
+    if (ecSameCheck && ecAddrField) {
+      if (ecSameCheck.checked) {
+        ecAddrField.value = 'SAME ADDRESS';
+        ecAddrField.disabled = true;
+        ecAddrField.style.opacity = '0.6';
+      } else {
+        ecAddrField.value = '';
+        ecAddrField.disabled = false;
+        ecAddrField.style.opacity = '1';
+      }
+    }
+  }
+  if (ecSameCheck) {
+    ecSameCheck.addEventListener('change', toggleEcAddr);
+    // Run on page load in case checkbox was pre-checked (edit mode)
+    if (ecSameCheck.checked) toggleEcAddr();
+  }
+
   const video = document.getElementById('cam_video');
   const canvas = document.getElementById('cam_canvas');
-  const preview = document.getElementById('photo_preview');
+  const capturedPreview = document.getElementById('captured_preview');
+  const processedPreview = document.getElementById('photo_preview');
   const photoData = document.getElementById('photo_data');
+  const status = document.getElementById('camera_status');
+  const cropZoom = document.getElementById('crop_zoom');
+  const cropX = document.getElementById('crop_x');
+  const cropY = document.getElementById('crop_y');
+  const removalLevel = document.getElementById('removal_level');
 
   const btnStart = document.getElementById('btn_start');
   const btnCapture = document.getElementById('btn_capture');
-  const btnClear = document.getElementById('btn_clear');
+  const btnRetake = document.getElementById('btn_retake');
+  const btnUsePhoto = document.getElementById('btn_use_photo');
 
   let stream = null;
+  let capturedDataUrl = '';
+  let rawCapturedDataUrl = '';
+  let cropImage = null;
+  let currentOriginalPath = '';
+  let currentProcessedPath = '';
+  let processing = false;
+  let formSubmitting = false;
+  const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+  const form = document.querySelector('form');
+
+  function setStatus(message, isError = false) {
+    if (!status) return;
+    status.textContent = message || '';
+    status.classList.toggle('text-danger', isError);
+    status.classList.toggle('text-muted', !isError);
+  }
 
   async function startCamera() {
     try {
@@ -116,9 +255,10 @@
       video.srcObject = stream;
       btnCapture.disabled = false;
       btnStart.disabled = true;
+      setStatus('Camera ready. Capture a clear front-facing photo.');
     } catch (err) {
       console.error(err);
-      alert('Unable to access camera. Please allow camera permission in your browser.');
+      setStatus('Unable to access camera. Please allow camera permission in your browser.', true);
     }
   }
 
@@ -147,26 +287,132 @@
 
     // Use JPEG to keep file sizes manageable
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-    photoData.value = dataUrl;
-    preview.src = dataUrl;
-    btnClear.disabled = false;
+    rawCapturedDataUrl = dataUrl;
+    cropImage = new Image();
+    cropImage.onload = renderCropPreview;
+    cropImage.src = dataUrl;
+    photoData.value = '';
+    cropZoom.disabled = false;
+    cropX.disabled = false;
+    cropY.disabled = false;
+      cropZoom.value = '1.2';
+      cropX.value = '0';
+      cropY.value = '0';
+      removalLevel.disabled = false;
+      processedPreview.removeAttribute('src');
+    btnRetake.disabled = false;
+    btnUsePhoto.disabled = false;
+    setStatus('Photo captured. Review it, then click Remove Background if it looks good.');
   }
 
-  function clearCapture() {
+  function retakeCapture() {
+    cleanupCurrentCapture();
+    capturedDataUrl = '';
+    rawCapturedDataUrl = '';
+    cropImage = null;
     photoData.value = '';
-    preview.removeAttribute('src');
-    btnClear.disabled = true;
+    capturedPreview.removeAttribute('src');
+    processedPreview.removeAttribute('src');
+    cropZoom.disabled = true;
+    cropX.disabled = true;
+      cropY.disabled = true;
+      removalLevel.disabled = true;
+      btnRetake.disabled = true;
+    btnUsePhoto.disabled = true;
+    setStatus('Retake the photo when ready.');
+  }
+
+  function renderCropPreview() {
+    if (!cropImage || !cropImage.naturalWidth || !cropImage.naturalHeight) return;
+    const targetSize = 700;
+    canvas.width = targetSize;
+    canvas.height = targetSize;
+    const ctx = canvas.getContext('2d');
+    const zoom = Number(cropZoom.value || 1);
+    const sourceSide = Math.min(cropImage.naturalWidth, cropImage.naturalHeight) / zoom;
+    const maxX = Math.max(0, cropImage.naturalWidth - sourceSide);
+    const maxY = Math.max(0, cropImage.naturalHeight - sourceSide);
+    const sx = Math.max(0, Math.min(maxX, (maxX / 2) + Number(cropX.value || 0) * (maxX / 2)));
+    const sy = Math.max(0, Math.min(maxY, (maxY / 2) + Number(cropY.value || 0) * (maxY / 2)));
+    ctx.drawImage(cropImage, sx, sy, sourceSide, sourceSide, 0, 0, targetSize, targetSize);
+    capturedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    capturedPreview.src = capturedDataUrl;
+  }
+
+  function cleanupCurrentCapture(keepalive = false) {
+    const paths = [currentOriginalPath, currentProcessedPath].filter(Boolean);
+    if (!paths.length) return;
+    currentOriginalPath = '';
+    currentProcessedPath = '';
+    fetch('{{ url_for("main.capture_cleanup_photo") }}', {
+      method: 'POST',
+      keepalive,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+      },
+      body: JSON.stringify({ paths }),
+    }).catch((e) => console.warn('Cleanup failed:', e));
+  }
+
+  async function processPhoto() {
+    if (processing || !capturedDataUrl) return;
+    processing = true;
+    btnUsePhoto.disabled = true;
+    setStatus('Removing background. Please wait...');
+    try {
+      const body = { image_data: capturedDataUrl, removal_level: Number(removalLevel.value) || 2 };
+      if (currentOriginalPath && currentProcessedPath) {
+        body.original_path = currentOriginalPath;
+        body.processed_path = currentProcessedPath;
+      }
+      const response = await fetch('{{ url_for("main.capture_process_photo") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'Photo processing failed.');
+      currentOriginalPath = payload.original_image_path || '';
+      currentProcessedPath = payload.processed_image_path || '';
+      photoData.value = payload.processed_image_path;
+      processedPreview.src = payload.processed_image_url;
+      setStatus(payload.warning || 'Background removed. Adjust crop/zoom and click Remove Background again if needed.');
+    } catch (err) {
+      setStatus(err.message || 'Background removal failed. Please retake the photo.', true);
+    } finally {
+      processing = false;
+      btnUsePhoto.disabled = false;
+    }
   }
 
   btnStart?.addEventListener('click', startCamera);
   btnCapture?.addEventListener('click', capture);
-  btnClear?.addEventListener('click', clearCapture);
+  btnRetake?.addEventListener('click', retakeCapture);
+  btnUsePhoto?.addEventListener('click', processPhoto);
+  cropZoom?.addEventListener('input', renderCropPreview);
+  cropX?.addEventListener('input', renderCropPreview);
+  cropY?.addEventListener('input', renderCropPreview);
+  form?.addEventListener('submit', (e) => {
+    if (processing) {
+      e.preventDefault();
+      setStatus('Please wait for background removal to finish.', true);
+      return;
+    }
+    formSubmitting = true;
+  });
 
   // If the form already has a value (e.g., validation failed), keep preview
-  if (photoData?.value) preview.src = photoData.value;
+  if (photoData?.value && photoData.value.startsWith('uploads/')) processedPreview.src = `/static/${photoData.value}`;
 
   // Stop camera on page unload
-  window.addEventListener('beforeunload', stopCamera);
+  window.addEventListener('beforeunload', () => {
+    stopCamera();
+    if (!formSubmitting) cleanupCurrentCapture(true);
+  });
 })();
 </script>
 {% endblock %}

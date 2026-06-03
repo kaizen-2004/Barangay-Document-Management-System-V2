@@ -7,15 +7,44 @@
         <a class="btn btn-outline-secondary" href="{{ url_for('main.list_residents') }}">Back to Active</a>
       {% else %}
         <a class="btn btn-outline-secondary" href="{{ url_for('main.list_archived_residents') }}">View Archived</a>
+        <div class="btn-group">
+          <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">Export</button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{{ url_for('main.export_residents', format='csv') }}">Export as CSV</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('main.export_residents', format='xlsx') }}">Export as XLSX</a></li>
+          </ul>
+        </div>
         <a class="btn btn-primary" href="{{ url_for('main.add_resident') }}">Add Resident</a>
       {% endif %}
     </div>
 </div>
 
 {% if not archived_view and residents %}
-  <form id="bulk-archive-residents" method="post" action="{{ url_for('main.bulk_archive_residents') }}" class="mb-3">
+  <div class="d-flex flex-wrap gap-2 mb-3">
+  <form id="bulk-archive-residents" method="post" action="{{ url_for('main.bulk_archive_residents') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn btn-danger btn-sm" id="bulk-archive-residents-btn" disabled>Archive Selected</button>
+  </form>
+  <form id="bulk-issue-docs" method="post" action="{{ url_for('main.bulk_issue_documents') }}" class="d-flex gap-1">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <select name="document_type_id" class="form-select form-select-sm" style="min-width:180px;" required>
+      <option value="">Select document type...</option>
+      {% for dt in document_types %}
+        <option value="{{ dt.id }}">{{ dt.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-success btn-sm" id="bulk-issue-docs-btn" disabled>Issue to Selected</button>
+  </form>
+  </div>
+{% endif %}
+{% if archived_view and residents %}
+  <form id="bulk-restore-residents" method="post" action="{{ url_for('main.bulk_restore_residents') }}" class="mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-success btn-sm" id="bulk-restore-residents-btn" disabled>Restore Selected</button>
+  </form>
+  <form id="bulk-purge-residents" method="post" action="{{ url_for('main.bulk_purge_residents') }}" class="mb-3" data-confirm="Permanently delete selected archived residents? This cannot be undone.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-danger btn-sm" id="bulk-purge-residents-btn" disabled>Delete Selected</button>
   </form>
 {% endif %}
 
@@ -43,6 +72,15 @@
         <option value="barangay_id_asc" {% if sort=='barangay_id_asc' %}selected{% endif %}>Barangay ID (A–Z)</option>
       </select>
     </div>
+    <div>
+      <label class="form-label mb-1">Street</label>
+      <select class="form-select" name="street">
+        <option value="">All</option>
+        {% for s in streets %}
+          <option value="{{ s.id }}" {% if street_id == (s.id|string) %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <div class="filter-actions d-flex gap-2 ms-lg-auto">
       <button class="btn btn-primary" type="submit">Filter</button>
       <a class="btn btn-outline-secondary" href="{{ url_for('main.list_archived_residents') if archived_view else url_for('main.list_residents') }}">Reset</a>
@@ -61,6 +99,10 @@
             {% if not archived_view %}
               <th class="text-center" style="width: 32px;">
                 <input class="form-check-input" type="checkbox" id="select-all-residents" aria-label="Select all residents">
+              </th>
+            {% else %}
+              <th class="text-center" style="width: 32px;">
+                <input class="form-check-input" type="checkbox" id="select-all-archived-residents" aria-label="Select all archived residents">
               </th>
             {% endif %}
             <th>Barangay ID</th>
@@ -82,11 +124,15 @@
               <td class="text-center">
                 <input class="form-check-input resident-select" type="checkbox" name="resident_ids" value="{{ r.id }}" form="bulk-archive-residents" aria-label="Select resident {{ r.id }}">
               </td>
+            {% else %}
+              <td class="text-center">
+                <input class="form-check-input resident-archived-select" type="checkbox" name="resident_ids" value="{{ r.id }}" form="bulk-restore-residents" aria-label="Select resident {{ r.id }}">
+              </td>
             {% endif %}
             <td>{{ r.barangay_id or '—' }}</td>
             <td>
               <a href="{{ url_for('main.resident_profile', resident_id=r.id) }}" class="text-decoration-none">
-                {{ r.last_name }}, {{ r.first_name }} {% if r.middle_name %}{{ r.middle_name[0] }}.{% endif %}
+                {{ r.last_name|upper }}, {{ r.first_name|upper }} {% if r.middle_name %}{{ r.middle_name[0]|upper }}.{% endif %}
               </a>
             </td>
             <td>
@@ -98,12 +144,12 @@
             </td>
             <td>{{ r.gender }}</td>
             <td>{{ r.birth_date.strftime('%Y-%m-%d') }}</td>
-            <td>{{ r.address }}</td>
+            <td>{{ r.full_address }}</td>
             <td>{{ r.created_at.strftime('%Y-%m-%d') }}</td>
             <td>
               {% set last_at = r.updated_at or r.created_at %}
               {% set last_user_id = r.updated_by_id or r.created_by_id %}
-              <div class="small">{{ last_at.strftime('%Y-%m-%d %H:%M') if last_at else '—' }}</div>
+              <div class="small">{{ last_at|local_datetime }}</div>
               <div class="small text-muted">{{ user_map.get(last_user_id, '—') }}</div>
             </td>
             <td>
@@ -127,7 +173,7 @@
                       <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="{{ url_for('main.resident_profile', resident_id=r.id) }}">View</a></li>
                         <li>
-                          <form class="m-0" method="post" action="{{ url_for('main.delete_resident', resident_id=r.id) }}" onsubmit="return confirm('Archive this resident and associated documents?');">
+                           <form class="m-0" method="post" action="{{ url_for('main.delete_resident', resident_id=r.id) }}" data-confirm="Archive this resident and associated documents?">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="dropdown-item text-danger">Archive</button>
                           </form>
@@ -136,10 +182,16 @@
                     </div>
                   </div>
                 {% else %}
-                  <form class="d-inline" method="post" action="{{ url_for('main.restore_resident', resident_id=r.id) }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">Restore</button>
-                  </form>
+                  <div class="d-flex gap-1">
+                    <form class="d-inline" method="post" action="{{ url_for('main.restore_resident', resident_id=r.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary">Restore</button>
+                    </form>
+                    <form class="d-inline" method="post" action="{{ url_for('main.purge_resident', resident_id=r.id) }}" data-confirm="Permanently delete this archived resident? This cannot be undone.">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                    </form>
+                  </div>
                 {% endif %}
             </td>
         </tr>
@@ -149,7 +201,7 @@
 </div>
 </div>
 {% else %}
-<div class="bdm-empty-state">No residents found. Click "Add Resident" to create one.</div>
+<div class="bdm-empty-state-icon"><i class="fas fa-users"></i><span>No residents found. Click "Add Resident" to create one.</span></div>
 {% endif %}
 {% include '_pagination.html' %}
 
@@ -158,11 +210,38 @@
 (() => {
   const selectAll = document.getElementById('select-all-residents');
   const selects = document.querySelectorAll('.resident-select');
-  const bulkBtn = document.getElementById('bulk-archive-residents-btn');
-  if (!selectAll || !selects.length || !bulkBtn) return;
+  const archiveBtn = document.getElementById('bulk-archive-residents-btn');
+  const issueBtn = document.getElementById('bulk-issue-docs-btn');
+  if (!selectAll || !selects.length || (!archiveBtn && !issueBtn)) return;
 
   function syncButton() {
-    bulkBtn.disabled = !Array.from(selects).some(cb => cb.checked);
+    const hasChecked = Array.from(selects).some(cb => cb.checked);
+    if (archiveBtn) archiveBtn.disabled = !hasChecked;
+    if (issueBtn) issueBtn.disabled = !hasChecked;
+  }
+
+  selectAll.addEventListener('change', () => {
+    selects.forEach(cb => { cb.checked = selectAll.checked; });
+    syncButton();
+  });
+
+  selects.forEach(cb => cb.addEventListener('change', syncButton));
+})();
+</script>
+{% endif %}
+{% if archived_view and residents %}
+<script>
+(() => {
+  const selectAll = document.getElementById('select-all-archived-residents');
+  const selects = document.querySelectorAll('.resident-archived-select');
+  const restoreBtn = document.getElementById('bulk-restore-residents-btn');
+  const purgeBtn = document.getElementById('bulk-purge-residents-btn');
+  if (!selectAll || !selects.length || (!restoreBtn && !purgeBtn)) return;
+
+  function syncButton() {
+    const hasChecked = Array.from(selects).some(cb => cb.checked);
+    if (restoreBtn) restoreBtn.disabled = !hasChecked;
+    if (purgeBtn) purgeBtn.disabled = !hasChecked;
   }
 
   selectAll.addEventListener('change', () => {
