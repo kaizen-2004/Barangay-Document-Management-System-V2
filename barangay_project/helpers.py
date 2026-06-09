@@ -171,6 +171,66 @@ def save_or_keep_resident_photo(value: str | None) -> str | None:
     return save_captured_image(value, "residents")
 
 
+def save_signature_data_url(data_url: str | None, subfolder: str) -> str | None:
+    """Save a canvas-captured signature from a data URL and return the relative path.
+
+    Canvas outputs clean PNG data with a transparent background — no
+    background removal is needed.  The file is saved under
+    ``uploads/original/<subfolder>/<uuid>.png``.
+    """
+    if not data_url:
+        return None
+
+    m = _DATA_URL_RE.match(data_url.strip())
+    if not m:
+        return None
+
+    ext = m.group("ext").lower()
+    if ext == "jpeg":
+        ext = "jpg"
+
+    try:
+        raw = base64.b64decode(m.group("data"), validate=True)
+    except Exception:
+        current_app.logger.exception("Failed to decode base64 signature data")
+        return None
+
+    upload_root = current_app.config.get(
+        "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
+    )
+    target_dir = os.path.join(upload_root, "original", subfolder)
+    os.makedirs(target_dir, exist_ok=True)
+
+    unique_stem = uuid.uuid4().hex
+    unique_name = f"{unique_stem}.{ext}"
+    abs_path = os.path.join(target_dir, unique_name)
+
+    # Crop transparent edges so the signature fills the placeholder snugly
+    from PIL import Image
+    from io import BytesIO
+    try:
+        img = Image.open(BytesIO(raw)).convert("RGBA")
+        bbox = img.getbbox()
+        if bbox:
+            img = img.crop(bbox)
+        img.save(abs_path, format="PNG")
+    except Exception:
+        current_app.logger.exception("Failed to crop signature; saving raw data.")
+        with open(abs_path, "wb") as f:
+            f.write(raw)
+
+    return f"uploads/original/{subfolder}/{unique_name}"
+
+
+def save_or_keep_resident_signature(value: str | None) -> str | None:
+    """Persist a resident signature value, whether a data URL or saved static path."""
+    if not value:
+        return None
+    if is_static_upload_path(value):
+        return value
+    return save_signature_data_url(value, "signatures")
+
+
 def delete_capture_photo_paths(paths: list[str]) -> int:
     """Delete temporary capture files under uploads/photos only."""
     upload_root = current_app.config.get(

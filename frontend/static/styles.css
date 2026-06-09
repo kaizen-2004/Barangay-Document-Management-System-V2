@@ -898,6 +898,10 @@ footer{
   padding: 0.85rem;
 }
 
+.bdm-sig-panel{
+  grid-column: span 2;
+}
+
 .bdm-camera-panel-title{
   margin-bottom: 0.6rem;
   color: var(--bdm-text);
@@ -2490,5 +2494,153 @@ footer{
   }
   .table-actions .action-group .action-main {
     flex-wrap: wrap;
+  }
+}
+
+/* ==================================================================
+   Mobile UX improvements
+   ================================================================== */
+
+/* Larger touch targets for small screens */
+@media (max-width: 575.98px) {
+  .btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-sm {
+    min-height: 38px;
+    font-size: 0.82rem;
+    padding: 0.3rem 0.7rem;
+  }
+  .form-control,
+  .form-select {
+    min-height: 44px;
+    font-size: 16px; /* prevent iOS zoom on focus */
+  }
+  .bdm-camera-actions .btn {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .bdm-page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 0.85rem;
+  }
+  .bdm-page-actions {
+    width: 100%;
+  }
+  .bdm-page-actions .btn {
+    flex: 1 1 auto;
+  }
+  .bdm-form-card {
+    padding: 1rem;
+  }
+  .bdm-camera-card {
+    padding: 0.75rem;
+  }
+  .bdm-camera-card-header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .bdm-camera-grid {
+    grid-template-columns: 1fr;
+  }
+  .bdm-sig-panel {
+    grid-column: 1;
+  }
+  .bdm-topbar {
+    gap: 0.4rem;
+  }
+  .bdm-topbar-left {
+    flex: 0 0 auto;
+    width: auto;
+  }
+  .bdm-topbar-right {
+    flex: 0 0 auto;
+    width: auto;
+    gap: 0.4rem;
+  }
+  .bdm-section-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .bdm-section-actions {
+    width: 100%;
+  }
+  .bdm-section-actions .btn,
+  .bdm-section-actions .btn-group {
+    width: 100%;
+  }
+  .bdm-section-actions .btn-group .btn {
+    flex: 1;
+  }
+  .bdm-table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .bdm-hero-card {
+    padding: 1.25rem;
+  }
+  .bdm-hero-card h1 {
+    font-size: 1.35rem;
+  }
+  .bdm-profile-hero {
+    padding: 0.85rem;
+  }
+  .navbar-brand {
+    max-width: 100%;
+  }
+  .brand-title-full {
+    display: none !important;
+  }
+  .brand-title-short {
+    display: inline !important;
+  }
+
+  /* Table cells: allow wrapping instead of horizontal scroll */
+  .table td,
+  .table th {
+    white-space: normal !important;
+  }
+  .table-actions {
+    white-space: nowrap;
+  }
+
+  /* Stack bulk action forms on resident/doc list */
+  #bulk-archive-residents,
+  #bulk-issue-docs,
+  #bulk-restore-residents,
+  #bulk-purge-residents,
+  #bulk-archive-docs,
+  #bulk-restore-docs,
+  #bulk-purge-docs {
+    width: 100%;
+  }
+  #bulk-issue-docs {
+    flex-direction: column;
+  }
+  #bulk-issue-docs select {
+    min-width: 0 !important;
+    width: 100%;
+  }
+  #bulk-issue-docs button {
+    width: 100%;
+  }
+}
+
+/* Table column visibility helpers */
+@media (max-width: 767.98px) {
+  .bdm-hide-md {
+    display: none !important;
+  }
+}
+@media (max-width: 575.98px) {
+  .bdm-hide-sm {
+    display: none !important;
   }
 }

@@ -130,7 +130,7 @@
             <div class="action-group">
               <div class="action-main">
                 {% if doc.status == 'issued' and doc.file_path %}
-                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}" target="_blank" rel="noopener">Print</a>
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}" target="_blank" rel="noopener">Download</a>
                 {% endif %}
                 {% if not resident.is_archived and doc.document_type_id %}
                   <a class="btn btn-sm btn-outline-success" href="{{ url_for('main.issue_document', resident_id=resident.id, document_type_id=doc.document_type_id) }}">Issue Same</a>

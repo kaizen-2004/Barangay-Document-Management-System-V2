@@ -22,7 +22,7 @@ if ($ExecutablePath -and -not (Test-Path $ExecutablePath)) {
 }
 
 $appBinary = $null
-$args = ""
+$appArgs = @()
 if ($ExecutablePath) {
     $appBinary = $ExecutablePath
 } else {
@@ -31,10 +31,10 @@ if ($ExecutablePath) {
         throw "uv is not installed or not in PATH. Install uv first, or pass -ExecutablePath."
     }
     $appBinary = $uvCmd.Source
-    $args = "run waitress-serve --host=$Host --port=$Port wsgi:app"
+    $appArgs = @("run", "waitress-serve", "--host=$Host", "--port=$Port", "wsgi:app")
 }
 
-& $NssmPath install $ServiceName $appBinary $args
+& $NssmPath install $ServiceName $appBinary $appArgs
 & $NssmPath set $ServiceName AppDirectory $AppDir
 & $NssmPath set $ServiceName Start SERVICE_AUTO_START
 & $NssmPath set $ServiceName AppStdout "$AppDir\..\logs\service-out.log"

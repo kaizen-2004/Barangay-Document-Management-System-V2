@@ -149,7 +149,7 @@
                 <div class="action-group">
                   <div class="action-main">
                     {% if doc.status == "issued" and doc.file_path %}
-                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}" target="_blank" rel="noopener">Print</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}" target="_blank" rel="noopener">Download</a>
                     {% endif %}
                     {% if not doc.is_archived and doc.status == "issued" %}
                         <form method="POST" action="{{ url_for('main.revise_document', document_id=doc.id) }}" class="d-inline">

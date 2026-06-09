@@ -3,16 +3,20 @@ setlocal
 
 cd /d %~dp0
 
+rem Navigate to project root (two levels up from packaging\windows_bundle\)
+cd ..\..
+
 if not exist ".env" (
-  echo [INFO] .env not found. Copying from .env.example...
-  copy /Y ".env.example" ".env" >nul
-  echo [INFO] Please edit .env before first production use.
+  if exist ".env.example" (
+    echo [INFO] .env not found. Copying from .env.example...
+    copy /Y ".env.example" ".env" >nul
+    echo [INFO] Please edit .env before first production use.
+  ) else (
+    echo [ERROR] Neither .env nor .env.example found.
+    exit /b 1
+  )
 )
 
-if not exist "backups" mkdir "backups"
-if not exist "uploads" mkdir "uploads"
-
-set APP_ENV=production
 set HOST=0.0.0.0
 set PORT=5000
 
@@ -20,6 +24,6 @@ echo Starting Barangay Server on http://%COMPUTERNAME%:%PORT%
 echo Press Ctrl+C to stop.
 echo.
 
-barangay_server.exe
+uv run waitress-serve --host=%HOST% --port=%PORT% wsgi:app
 
 endlocal

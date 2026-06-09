@@ -47,7 +47,7 @@
 
   {# Metric cards row #}
   <div class="row g-3 mb-4">
-    <div class="col-md-6 col-xl">
+    <div class="col-12 col-sm-6 col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#fce4e4;color:#7f1d1d;"><i class="fas fa-users"></i></span>
         <div class="flex-grow-1">
@@ -58,7 +58,7 @@
         <a class="btn btn-primary btn-sm ms-auto" href="{{ url_for('main.list_residents') }}">Open</a>
       </div>
     </div>
-    <div class="col-md-6 col-xl">
+    <div class="col-12 col-sm-6 col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-file-lines"></i></span>
         <div class="flex-grow-1">
@@ -69,7 +69,7 @@
         <a class="btn btn-success btn-sm ms-auto" href="{{ url_for('main.list_documents') }}">Open</a>
       </div>
     </div>
-    <div class="col-md-6 col-xl">
+    <div class="col-12 col-sm-6 col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#e0e7ff;color:#3730a3;"><i class="fas fa-calendar-check"></i></span>
         <div class="flex-grow-1">
@@ -80,7 +80,7 @@
         <a class="btn btn-outline-secondary btn-sm ms-auto" href="{{ url_for('main.reports') }}">Reports</a>
       </div>
     </div>
-    <div class="col-md-6 col-xl">
+    <div class="col-12 col-sm-6 col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-pen"></i></span>
         <div class="flex-grow-1">
@@ -91,7 +91,7 @@
         <a class="btn btn-outline-primary btn-sm ms-auto" href="{{ url_for('main.list_documents', status='draft') }}">Review</a>
       </div>
     </div>
-    <div class="col-md-6 col-xl">
+    <div class="col-12 col-sm-6 col-md-6 col-xl">
       <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#f1f5f9;color:#475569;"><i class="fas fa-archive"></i></span>
         <div class="flex-grow-1">
@@ -182,7 +182,7 @@
 
   {# Charts row 1 #}
   <div class="row g-3 mb-4">
-    <div class="col-lg-4">
+    <div class="col-12 col-lg-4">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent">
           <div class="fw-semibold"><i class="fas fa-venus-mars me-1"></i> Residents by gender</div>
@@ -193,7 +193,7 @@
         </div>
       </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-12 col-lg-4">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent">
           <div class="fw-semibold"><i class="fas fa-tasks me-1"></i> Document status</div>
@@ -204,7 +204,7 @@
         </div>
       </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-12 col-lg-4">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent">
           <div class="fw-semibold"><i class="fas fa-file-lines me-1"></i> Documents by type</div>
@@ -219,7 +219,7 @@
 
   {# Charts row 2 - trends #}
   <div class="row g-3 mb-4">
-    <div class="col-lg-6">
+    <div class="col-12 col-lg-6">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent">
           <div class="fw-semibold"><i class="fas fa-chart-line me-1"></i> Documents trend</div>
@@ -230,7 +230,7 @@
         </div>
       </div>
     </div>
-    <div class="col-lg-6">
+    <div class="col-12 col-lg-6">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent">
           <div class="fw-semibold"><i class="fas fa-user-plus me-1"></i> Resident signups</div>

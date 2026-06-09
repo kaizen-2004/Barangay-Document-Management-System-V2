@@ -20,15 +20,15 @@
 {# Date filter #}
 <form method="get" class="bdm-filter-card bdm-section">
   <div class="row g-2 align-items-end">
-    <div class="col-md-3">
+    <div class="col-12 col-sm-6 col-md-3">
       <label class="form-label small mb-1">From</label>
       <input type="date" class="form-control" name="date_from" value="{{ date_from }}">
     </div>
-    <div class="col-md-3">
+    <div class="col-12 col-sm-6 col-md-3">
       <label class="form-label small mb-1">To</label>
       <input type="date" class="form-control" name="date_to" value="{{ date_to }}">
     </div>
-    <div class="col-md-2">
+    <div class="col-12 col-sm-6 col-md-2">
       <label class="form-label small mb-1">Type</label>
       <select name="type" class="form-select">
         <option value="">All</option>
@@ -37,7 +37,7 @@
         {% endfor %}
       </select>
     </div>
-    <div class="col-md-2">
+    <div class="col-12 col-sm-6 col-md-2">
       <label class="form-label small mb-1">Status</label>
       <select name="status" class="form-select">
         <option value="">Issued</option>
@@ -45,7 +45,7 @@
         <option value="issued" {% if filter_status == 'issued' %}selected{% endif %}>Issued</option>
       </select>
     </div>
-    <div class="col-md-2 d-flex gap-2">
+    <div class="col-12 col-sm-6 col-md-2 d-flex gap-2">
       <button class="btn btn-primary w-100" type="submit">Apply</button>
       <a class="btn btn-outline-secondary w-100" href="{{ url_for('main.reports') }}">Reset</a>
     </div>

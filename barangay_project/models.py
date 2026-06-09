@@ -63,6 +63,7 @@ class Resident(db.Model):
     street_id = db.Column(db.Integer, db.ForeignKey("barangay_streets.id"), nullable=True)
     address = db.Column(db.String(255), nullable=False)
     photo_path = db.Column(db.String(255), nullable=True)
+    signature_path = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow)
     updated_at = db.Column(db.DateTime, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)

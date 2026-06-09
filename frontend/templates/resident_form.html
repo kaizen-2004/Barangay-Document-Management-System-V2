@@ -62,6 +62,28 @@
         </div>
     </div>
 
+    <div class="bdm-camera-card mb-4">
+        <div class="bdm-camera-card-header">
+            <div>
+                <div class="bdm-camera-title"><i class="fas fa-pen me-1"></i> Resident Signature</div>
+                <div class="bdm-camera-subtitle">Draw your signature using mouse, touch, or stylus.</div>
+            </div>
+        </div>
+        <div class="bdm-camera-grid">
+            <div class="bdm-camera-panel bdm-sig-panel">
+                <canvas id="sigCanvas" width="600" height="200"
+                    style="width:100%; height:auto; aspect-ratio:3/1; border:2px solid #ccc; border-radius:0.5rem; cursor:crosshair; touch-action:none;"></canvas>
+                <div class="bdm-camera-actions mt-2">
+                    <button type="button" id="btnClearSig" class="btn btn-outline-secondary btn-sm">Clear</button>
+                    <button type="button" id="btnSaveSig" class="btn btn-success btn-sm">Save Signature</button>
+                </div>
+                <div class="form-text mt-2">Sign above, then click "Save Signature". A preview will appear below.</div>
+                <img id="sigPreview" style="display:none; max-height:3.75rem; margin-top:0.5rem; border:1px solid #ddd; border-radius:0.25rem; padding:0.25rem;" />
+                {{ form.signature_data(id='signature_data') }}
+            </div>
+        </div>
+    </div>
+
     <div class="bdm-form-section mb-3">
       <h3 class="bdm-form-section-title"><i class="fas fa-address-card"></i> Personal Information</h3>
       <div class="bdm-form-grid">
@@ -249,7 +271,19 @@
     status.classList.toggle('text-muted', !isError);
   }
 
+  function isSecureContext() {
+    return window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  }
+
   async function startCamera() {
+    if (!isSecureContext()) {
+      setStatus('Camera requires HTTPS. Run with --ssl flag (see README).', true);
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus('Camera not supported in this browser.', true);
+      return;
+    }
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       video.srcObject = stream;
@@ -258,7 +292,13 @@
       setStatus('Camera ready. Capture a clear front-facing photo.');
     } catch (err) {
       console.error(err);
-      setStatus('Unable to access camera. Please allow camera permission in your browser.', true);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setStatus('Camera permission denied. Allow camera access in your browser settings.', true);
+      } else if (err.name === 'NotFoundError') {
+        setStatus('No camera found on this device.', true);
+      } else {
+        setStatus('Unable to access camera. Please allow camera permission in your browser.', true);
+      }
     }
   }
 
@@ -407,6 +447,114 @@
 
   // If the form already has a value (e.g., validation failed), keep preview
   if (photoData?.value && photoData.value.startsWith('uploads/')) processedPreview.src = `/static/${photoData.value}`;
+
+  // ── Signature pad ──────────────────────────────────────────────────────
+  const sigCanvas = document.getElementById('sigCanvas');
+  const sigCtx = sigCanvas?.getContext('2d');
+  const sigData = document.getElementById('signature_data');
+  const sigPreview = document.getElementById('sigPreview');
+  const btnClearSig = document.getElementById('btnClearSig');
+  const btnSaveSig = document.getElementById('btnSaveSig');
+  let sigDrawing = false;
+
+  if (sigCanvas && sigCtx) {
+    sigCtx.strokeStyle = '#000';
+    sigCtx.lineWidth = 2;
+    sigCtx.lineCap = 'round';
+    sigCtx.lineJoin = 'round';
+
+    function sigGetPos(e) {
+      const rect = sigCanvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: (clientX - rect.left) * (sigCanvas.width / rect.width),
+        y: (clientY - rect.top) * (sigCanvas.height / rect.height),
+      };
+    }
+
+    function sigStart(e) {
+      e.preventDefault();
+      sigDrawing = true;
+      const pos = sigGetPos(e);
+      sigCtx.beginPath();
+      sigCtx.moveTo(pos.x, pos.y);
+    }
+
+    function sigDraw(e) {
+      e.preventDefault();
+      if (!sigDrawing) return;
+      const pos = sigGetPos(e);
+      sigCtx.lineTo(pos.x, pos.y);
+      sigCtx.stroke();
+    }
+
+    function sigEnd(e) {
+      e.preventDefault();
+      sigDrawing = false;
+    }
+
+    sigCanvas.addEventListener('mousedown', sigStart);
+    sigCanvas.addEventListener('mousemove', sigDraw);
+    sigCanvas.addEventListener('mouseup', sigEnd);
+    sigCanvas.addEventListener('mouseleave', sigEnd);
+    sigCanvas.addEventListener('touchstart', sigStart, { passive: false });
+    sigCanvas.addEventListener('touchmove', sigDraw, { passive: false });
+    sigCanvas.addEventListener('touchend', sigEnd);
+  }
+
+  btnClearSig?.addEventListener('click', () => {
+    if (!sigCtx) return;
+    sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+    sigData.value = '';
+    sigPreview.style.display = 'none';
+  });
+
+  btnSaveSig?.addEventListener('click', async () => {
+    if (!sigCanvas || !sigCtx || !sigData) return;
+    // Check canvas is not empty
+    const imageData = sigCtx.getImageData(0, 0, sigCanvas.width, sigCanvas.height);
+    const pixels = imageData.data;
+    let hasContent = false;
+    for (let i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] > 0) { hasContent = true; break; }
+    }
+    if (!hasContent) {
+      setStatus('Please draw your signature first.', true);
+      return;
+    }
+    btnSaveSig.disabled = true;
+    setStatus('Saving signature...');
+    try {
+      const dataUrl = sigCanvas.toDataURL('image/png');
+      const response = await fetch('{{ url_for("main.process_signature") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({ image_data: dataUrl }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'Signature save failed.');
+      sigData.value = payload.signature_path;
+      sigPreview.src = payload.signature_url;
+      sigPreview.style.display = 'block';
+      setStatus('Signature saved successfully.');
+    } catch (err) {
+      setStatus(err.message || 'Failed to save signature.', true);
+    } finally {
+      btnSaveSig.disabled = false;
+    }
+  });
+
+  // Restore existing signature preview on page load (edit mode / validation error)
+  if (sigData?.value && sigData.value.startsWith('uploads/') && sigPreview) {
+    sigPreview.src = `/static/${sigData.value}`;
+    sigPreview.style.display = 'block';
+  }
+
+  // ── End signature pad ──────────────────────────────────────────────────
 
   // Stop camera on page unload
   window.addEventListener('beforeunload', () => {

@@ -1,0 +1,83 @@
+Barangay Document Management System - Deployment Instructions
+=============================================================
+
+Goal: Install once, then just double-click to run.
+
+
+Step 1: Install Python
+-----------------------
+1. Go to https://python.org and download Python 3.10 or higher
+2. Run the installer
+3. CHECK "Add Python to PATH" at the bottom
+4. Click Install
+
+
+Step 2: Install Git
+--------------------
+1. Go to https://git-scm.com and download Git for Windows
+2. Run the installer (default options are fine)
+
+
+Step 3: Deploy (one-time setup)
+--------------------------------
+Open Command Prompt and run:
+
+    cd C:\
+    git clone <repo-url> barangay
+    cd barangay
+
+    python -m venv venv
+    venv\Scripts\activate
+    pip install -r requirements.txt
+    set FLASK_APP=barangay_project/app.py
+    flask db upgrade
+    flask seed-admin
+
+
+Step 4: Create desktop shortcut
+--------------------------------
+1. Right-click desktop -> New -> Shortcut
+2. For location, type:
+
+       C:\barangay\start-ssl.bat
+
+3. Click Next, name "Barangay System", click Finish
+
+
+Step 5: Run
+------------
+Double-click the "Barangay System" shortcut.
+
+- Server starts (HTTPS), browser opens at https://localhost:5000
+- Your IP is shown for mobile access via https://<IP>:5000
+- Accept the self-signed cert warning on mobile for camera use
+
+To stop: close the "Barangay Server" window.
+
+
+Build a standalone .exe (optional)
+-----------------------------------
+If you want to run without Python installed:
+
+1. Open Command Prompt in C:\barangay
+2. Run:
+
+       venv\Scripts\activate
+       build.bat
+
+3. The .exe is at: dist\BarangaySystem\BarangaySystem.exe
+4. Create a desktop shortcut pointing to that .exe
+5. Double-click to run directly (no Python needed)
+
+The .exe is portable — copy the dist\BarangaySystem folder to
+any Windows PC and run BarangaySystem.exe directly.
+
+
+Notes
+-----
+- No external applications (LibreOffice, MySQL, openssl) needed.
+- All dependencies are Python libraries installed via pip.
+- Default database is SQLite (no database server required).
+- HTTPS uses a Python-generated self-signed certificate.
+- PDF conversion (LibreOffice) is skipped if unavailable;
+  the system serves .docx files instead.

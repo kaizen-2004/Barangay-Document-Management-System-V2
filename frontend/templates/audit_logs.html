@@ -18,22 +18,22 @@
     <table class="table table-hover mb-0 align-middle">
       <thead class="table-light">
         <tr>
-          <th style="width: 190px;">When</th>
-          <th style="width: 180px;">Who</th>
+          <th style="width: 140px;" class="bdm-hide-sm">When</th>
+          <th style="width: 140px;" class="bdm-hide-sm">Who</th>
           <th>What happened</th>
-          <th style="width: 180px;">Item</th>
+          <th style="width: 140px;" class="bdm-hide-sm">Item</th>
         </tr>
       </thead>
       <tbody>
         {% for l in logs %}
         <tr>
-          <td class="small text-muted">{{ loghelpers.pretty_time(l.timestamp) }}</td>
-          <td>{{ l.user.username if l.user else 'System' }}</td>
-          <td>{{ loghelpers.pretty_action(l.action) }}</td>
-          <td class="small text-muted">{{ loghelpers.pretty_entity(l.entity_type, l.entity_id) or '—' }}</td>
+          <td class="small text-muted bdm-hide-sm">{{ loghelpers.pretty_time(l.timestamp) }}</td>
+          <td class="bdm-hide-sm">{{ l.user.username if l.user else 'System' }}</td>
+          <td>{{ loghelpers.pretty_action(l.action) }}<br><span class="small text-muted d-sm-none">{{ loghelpers.pretty_time(l.timestamp) }} &middot; {{ l.user.username if l.user else 'System' }}</span></td>
+          <td class="small text-muted bdm-hide-sm">{{ loghelpers.pretty_entity(l.entity_type, l.entity_id) or '—' }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="4" class="text-muted p-3"><i class="fas fa-clock me-2"></i>No logs yet.</td></tr>
+        <tr><td colspan="4" class="text-muted p-3 text-center"><i class="fas fa-clock me-2"></i>No logs yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

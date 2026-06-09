@@ -167,7 +167,7 @@ OPTIONAL_PLACEHOLDERS = {
     "document_id",
     "document_type",
     "captain_name",
-    "captain_signature",
+    "resident_signature",
     "year_on_barangay",
     "birth_date",
     "validity",
@@ -351,6 +351,13 @@ def _build_resident_photo_for_document(photo_abs: str, document_id: int) -> str:
     return str(target)
 
 
+def _build_resident_signature_for_document(tpl: DocxTemplate, resident) -> str | InlineImage:
+    sig_abs = _relative_static_to_abs(getattr(resident, "signature_path", None))
+    if sig_abs and Path(sig_abs).exists():
+        return InlineImage(tpl, sig_abs, width=Mm(35))
+    return ""
+
+
 def _build_context(document, tpl: DocxTemplate) -> dict:
     resident = document.resident
     issue_dt = document.issue_date.date() if hasattr(document.issue_date, "date") else document.issue_date
@@ -396,13 +403,15 @@ def _build_context(document, tpl: DocxTemplate) -> dict:
         "expiration_date": expiration_date,
         "resident_photo": InlineImage(tpl, resident_photo_for_docx),
         "captain_signature": "",
+        "resident_signature": _build_resident_signature_for_document(tpl, resident),
         "qr_code": InlineImage(tpl, qr_abs, width=Inches(1), height=Inches(1)),
     }
     context.update(_custom_field_values(document))
     return apply_document_formatting(context)
 
 
-def _convert_docx_to_pdf(docx_path: Path) -> Path:
+def _convert_docx_to_pdf(docx_path: Path) -> Path | None:
+    """Convert DOCX to PDF via LibreOffice. Returns None if LibreOffice is unavailable."""
     libreoffice_bin = current_app.config.get("LIBREOFFICE_BIN", "soffice")
     timeout = int(current_app.config.get("LIBREOFFICE_TIMEOUT_SECONDS", 90))
     out_dir = docx_path.parent
@@ -417,13 +426,15 @@ def _convert_docx_to_pdf(docx_path: Path) -> Path:
     ]
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        raise DocumentGenerationError(f"PDF conversion failed: {exc}") from exc
+    except FileNotFoundError:
+        current_app.logger.warning("LibreOffice not found — PDF conversion skipped.")
+        return None
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        current_app.logger.exception("LibreOffice PDF conversion failed — skipping PDF.")
+        return None
 
     pdf_path = out_dir / f"{docx_path.stem}.pdf"
-    if not pdf_path.exists():
-        raise DocumentGenerationError("PDF conversion did not produce a file.")
-    return pdf_path
+    return pdf_path if pdf_path.exists() else None
 
 
 def _normalize_photo_formatting(docx_path: Path) -> None:
@@ -601,8 +612,11 @@ def render_document_files(document) -> tuple[str, str]:
 
     pdf_abs = _convert_docx_to_pdf(docx_abs)
 
+    pdf_rel = ""
+    if pdf_abs:
+        pdf_rel = str(pdf_abs.relative_to(document_output_dir()).as_posix())
+
     docx_rel = str(docx_abs.relative_to(document_output_dir()).as_posix())
-    pdf_rel = str(pdf_abs.relative_to(document_output_dir()).as_posix())
     return docx_rel, pdf_rel
 
 
@@ -664,7 +678,7 @@ def preview_document_type_template(doc_type) -> tuple[bytes, str]:
         "year_on_barangay": "5 years",
         "validity": "Valid for 6 months",
         "expiration_date": "July 15, 2025",
-        "captain_signature": "",
+        "resident_signature": "",
     }
 
     # Generate placeholder images for resident_photo and qr_code ------------

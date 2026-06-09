@@ -27,7 +27,7 @@
   </form>
   <form id="bulk-issue-docs" method="post" action="{{ url_for('main.bulk_issue_documents') }}" class="d-flex gap-1">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <select name="document_type_id" class="form-select form-select-sm" style="min-width:180px;" required>
+    <select name="document_type_id" class="form-select form-select-sm" style="min-width:140px;" required>
       <option value="">Select document type...</option>
       {% for dt in document_types %}
         <option value="{{ dt.id }}">{{ dt.name }}</option>

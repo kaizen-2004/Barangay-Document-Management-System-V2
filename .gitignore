@@ -1,10 +1,17 @@
 # Secrets
 .env
 *.env
+cert.pem
+key.pem
 
-# Local data / backups
+# Local data / backups / logs
+data/
 backups/
 barangay_project/static/uploads/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # Python caches
 __pycache__/
@@ -25,3 +32,8 @@ venv/
 
 # Templates
 template_assets/
+
+a.out
+barangay_data/
+barangay_project.egg-info/
+frontend/static/uploads/

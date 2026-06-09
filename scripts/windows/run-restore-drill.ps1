@@ -1,29 +1,50 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$BackupPath,
-    [string]$MysqlPath = "C:\xampp\mysql\bin\mysql.exe",
-    [string]$Host = "127.0.0.1",
-    [int]$Port = 3306,
-    [string]$Username = "barangay_user",
-    [string]$Password = "barangay_password",
-    [string]$Database = "barangay_db"
+    [string]$TargetDb = "C:\barangay_system\data\barangay.db",
+    [string]$ServiceName = "BarangaySystem"
 )
 
 $ErrorActionPreference = "Stop"
-
-if (-not (Test-Path $MysqlPath)) {
-    throw "mysql executable not found: $MysqlPath"
-}
 
 if (-not (Test-Path $BackupPath)) {
     throw "Backup file not found: $BackupPath"
 }
 
-$env:MYSQL_PWD = $Password
-try {
-    Get-Content $BackupPath | & $MysqlPath --host=$Host --port=$Port --user=$Username $Database
-} finally {
-    Remove-Item Env:\MYSQL_PWD -ErrorAction SilentlyContinue
+Write-Host "WARNING: This will replace the live database with the backup file."
+Write-Host "  Backup:  $BackupPath"
+Write-Host "  Target:  $TargetDb"
+Write-Host ""
+
+$confirm = Read-Host "Type YES to continue"
+if ($confirm -ne "YES") {
+    Write-Host "Aborted."
+    exit 0
 }
 
-Write-Host "Restore drill completed using: $BackupPath"
+$nssmBin = Join-Path (Split-Path -Parent (Get-Command nssm -ErrorAction SilentlyContinue).Source) ""
+if (-not $nssmBin) {
+    $nssmBin = "C:\barangay_system\data\nssm.exe"
+}
+
+# Stop service, restore, restart
+Write-Host "Stopping service..."
+if (Test-Path $nssmBin) {
+    & $nssmBin stop $ServiceName
+} else {
+    sc.exe stop $ServiceName
+}
+
+Start-Sleep -Seconds 2
+
+Write-Host "Restoring backup..."
+Copy-Item $BackupPath $TargetDb -Force
+
+Write-Host "Starting service..."
+if (Test-Path $nssmBin) {
+    & $nssmBin start $ServiceName
+} else {
+    sc.exe start $ServiceName
+}
+
+Write-Host "Restore complete using: $BackupPath"

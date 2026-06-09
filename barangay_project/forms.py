@@ -52,6 +52,7 @@ class ResidentForm(FlaskForm):
     # Webcam-captured image as a data URL (data:image/jpeg;base64,...) coming
     # from the in-app camera capture UI.
     photo_data = HiddenField()
+    signature_data = HiddenField()
     barangay_id = StringField("Barangay ID No.", validators=[Optional(), Length(max=50)])
     first_name = StringField("First Name", validators=[DataRequired()])
     middle_name = StringField("Middle Name")

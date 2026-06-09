@@ -25,7 +25,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import and_, func, or_
 
 from .forms import DocumentForm, ResidentForm
-from .helpers import delete_capture_photo_paths, log_action, reprocess_captured_photo, roles_required, save_camera_capture_for_processing, save_or_keep_resident_photo
+from .helpers import delete_capture_photo_paths, log_action, reprocess_captured_photo, roles_required, save_camera_capture_for_processing, save_or_keep_resident_photo, save_or_keep_resident_signature
 from .docx_pipeline import render_document_files, DocumentGenerationError, resolve_stored_path_to_abs
 from .extensions import db
 from .formatting import format_ph_mobile, normalize_phone_for_storage
@@ -118,6 +118,17 @@ def _resident_profile_field_values(resident: Resident) -> dict[str, str]:
 def _resident_document_field_values() -> dict[int, dict[str, str]]:
     residents = Resident.query.filter(Resident.is_archived.is_(False)).all()
     return {resident.id: _resident_profile_field_values(resident) for resident in residents}
+
+
+def _resident_signature_values() -> dict[int, dict[str, str]]:
+    residents = Resident.query.filter(Resident.is_archived.is_(False)).all()
+    return {
+        resident.id: {
+            "path": resident.signature_path or "",
+            "url": url_for("static", filename=resident.signature_path) if resident.signature_path else "",
+        }
+        for resident in residents
+    }
 
 
 def _resident_photo_values() -> dict[int, dict[str, str]]:
@@ -276,6 +287,29 @@ def capture_cleanup_photo():
         return jsonify({"success": False, "error": "Invalid cleanup request."}), 400
     deleted = delete_capture_photo_paths([str(path) for path in paths])
     return jsonify({"success": True, "deleted": deleted})
+
+
+@main_bp.route("/api/signatures/process", methods=["POST"])
+@login_required
+@roles_required("admin", "clerk")
+def process_signature():
+    if not current_app.config.get("ENABLE_CAMERA_CAPTURE", True):
+        return jsonify({"success": False, "error": "Camera capture is disabled."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    image_data = payload.get("image_data")
+    if not image_data:
+        return jsonify({"success": False, "error": "No image data provided."}), 400
+
+    rel_path = save_or_keep_resident_signature(image_data)
+    if not rel_path:
+        return jsonify({"success": False, "error": "Invalid signature image data."}), 400
+
+    return jsonify({
+        "success": True,
+        "signature_path": rel_path,
+        "signature_url": url_for("static", filename=rel_path) + f"?v={time.time_ns()}",
+    })
 
 
 @main_bp.route("/api/residents/<int:resident_id>/field-values")
@@ -1017,6 +1051,11 @@ def add_resident():
             photo_rel_path = save_or_keep_resident_photo(form.photo_data.data)
         if photo_rel_path:
             resident.photo_path = photo_rel_path
+
+        signature_rel_path = save_or_keep_resident_signature(form.signature_data.data)
+        if signature_rel_path:
+            resident.signature_path = signature_rel_path
+
         db.session.add(resident)
         # Ensure we have an ID for consistent auto-generated Barangay IDs
         db.session.flush()
@@ -1109,6 +1148,12 @@ def edit_resident(resident_id: int):
 
         if new_photo_rel_path:
             resident.photo_path = new_photo_rel_path
+
+        # Update signature only if a new one was captured
+        if form.signature_data.data:
+            sig_rel_path = save_or_keep_resident_signature(form.signature_data.data)
+            if sig_rel_path:
+                resident.signature_path = sig_rel_path
 
         db.session.commit()
         log_action(
@@ -1535,7 +1580,7 @@ def list_archived_documents():
 @login_required
 @roles_required("admin", "clerk")
 def download_document_pdf(document_id: int):
-    """Download the locally-generated PDF for a document."""
+    """Download the generated document. Serves PDF when available, otherwise falls back to DOCX."""
     doc = db.get_or_404(Document, document_id)
     if doc.is_archived:
         flash("Archived documents cannot be downloaded.", "warning")
@@ -1543,17 +1588,22 @@ def download_document_pdf(document_id: int):
     if doc.status != "issued":
         flash("Only issued documents can be downloaded.", "warning")
         return redirect(url_for("main.list_documents"))
-    if not doc.file_path:
-        flash("No generated PDF found for this issued document.", "danger")
+
+    file_path = doc.file_path or doc.generated_docx_path
+    if not file_path:
+        flash("No generated document file found.", "danger")
         return redirect(url_for("main.list_documents"))
 
-    pdf_abs_path = resolve_stored_path_to_abs(doc.file_path)
-    if not pdf_abs_path or not os.path.exists(pdf_abs_path):
-        flash("PDF file is missing on disk. Please run document regeneration.", "danger")
+    abs_path = resolve_stored_path_to_abs(file_path)
+    if not abs_path or not os.path.exists(abs_path):
+        flash("Document file is missing on disk. Please run document regeneration.", "danger")
         return redirect(url_for("main.list_documents"))
+
+    is_pdf = abs_path.suffix.lower() == ".pdf"
+    mimetype = "application/pdf" if is_pdf else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     log_action(
-        "Downloaded document PDF",
+        "Downloaded document PDF" if is_pdf else "Downloaded document DOCX",
         entity_type="document",
         entity_id=doc.id,
         meta={
@@ -1562,7 +1612,7 @@ def download_document_pdf(document_id: int):
         },
     )
 
-    return send_file(str(pdf_abs_path), mimetype="application/pdf", as_attachment=True)
+    return send_file(str(abs_path), mimetype=mimetype, as_attachment=True)
 
 
 @main_bp.route("/documents/issue", methods=["GET", "POST"])
@@ -1573,6 +1623,7 @@ def issue_document():
     field_configs = _document_type_field_configs()
     resident_field_values = _resident_document_field_values()
     resident_photo_values = _resident_photo_values()
+    resident_signature_values = _resident_signature_values()
     form.resident_id.choices = [
         (r.id, f"{r.last_name}, {r.first_name}".upper())
         for r in Resident.query.filter(Resident.is_archived.is_(False)).order_by(Resident.last_name.asc())
@@ -1594,20 +1645,20 @@ def issue_document():
         doc_type = db.get_or_404(DocumentType, form.document_type_id.data)
         if resident.is_archived:
             flash("Cannot create documents for archived residents.", "warning")
-            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
 
         if form.issue_date.data and form.issue_date.data > dt_date.today():
             form.issue_date.errors.append("Issue date cannot be in the future.")
-            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
         if form.issue_date.data and resident.birth_date and form.issue_date.data < resident.birth_date:
             form.issue_date.errors.append("Issue date cannot be before the resident's birth date.")
-            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
 
         field_values, field_errors = _collect_document_field_values(doc_type, resident)
         if field_errors:
             for error in field_errors:
                 flash(error, "danger")
-            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+            return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
 
         # If the user captured a new photo during issuance, store it on the resident record
         if form.resident_photo_data.data:
@@ -1641,7 +1692,7 @@ def issue_document():
     if not form.issue_date.data:
         form.issue_date.data = dt_date.today()
 
-    return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values={}, resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+    return render_template("document_form.html", form=form, title="Create Draft", document_type_field_configs=field_configs, custom_field_values={}, resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
 
 
 @main_bp.route("/documents/<int:document_id>/edit", methods=["GET", "POST"])
@@ -1652,6 +1703,7 @@ def edit_document(document_id: int):
     field_configs = _document_type_field_configs()
     resident_field_values = _resident_document_field_values()
     resident_photo_values = _resident_photo_values()
+    resident_signature_values = _resident_signature_values()
     if document.is_archived:
         flash("Archived documents cannot be edited.", "warning")
         return redirect(url_for("main.list_documents"))
@@ -1696,21 +1748,21 @@ def edit_document(document_id: int):
         resident = db.get_or_404(Resident, form.resident_id.data)
         if resident.is_archived:
             flash("Cannot assign archived residents to documents.", "warning")
-            return render_template("document_form.html", **_ctx, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+            return render_template("document_form.html", **_ctx, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
 
         if form.issue_date.data and form.issue_date.data > dt_date.today():
             form.issue_date.errors.append("Issue date cannot be in the future.")
-            return render_template("document_form.html", **_ctx, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+            return render_template("document_form.html", **_ctx, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
         if form.issue_date.data and resident.birth_date and form.issue_date.data < resident.birth_date:
             form.issue_date.errors.append("Issue date cannot be before the resident's birth date.")
-            return render_template("document_form.html", **_ctx, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+            return render_template("document_form.html", **_ctx, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
 
         doc_type = db.get_or_404(DocumentType, form.document_type_id.data)
         field_values, field_errors = _collect_document_field_values(doc_type, resident)
         if field_errors:
             for error in field_errors:
                 flash(error, "danger")
-            return render_template("document_form.html", **_ctx, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+            return render_template("document_form.html", **_ctx, custom_field_values=_posted_document_field_values(), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
 
         document.resident_id = form.resident_id.data
         document.document_type_id = form.document_type_id.data
@@ -1743,7 +1795,7 @@ def edit_document(document_id: int):
         flash("Document updated successfully!", "success")
         return redirect(url_for("main.list_documents"))
 
-    return render_template("document_form.html", **_ctx, custom_field_values=_document_field_values(document), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values)
+    return render_template("document_form.html", **_ctx, custom_field_values=_document_field_values(document), resident_field_values=resident_field_values, resident_photo_values=resident_photo_values, resident_signature_values=resident_signature_values)
 
 
 @main_bp.route("/documents/<int:document_id>/issue", methods=["POST"])
