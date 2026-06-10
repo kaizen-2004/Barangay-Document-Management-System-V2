@@ -43,14 +43,29 @@ def _data_dir() -> Path:
 
 def _setup_frozen_env() -> None:
     """When bundled with PyInstaller, redirect DB and uploads to app dir."""
+    import shutil
+
     if not _is_frozen():
         return
     data = _data_dir()
     uploads = data / "uploads"
     uploads.mkdir(parents=True, exist_ok=True)
 
+    # Copy seed doc_templates from bundle to writable data dir on first run
+    bundled_templates = Path(sys._MEIPASS) / "frontend" / "static" / "uploads" / "doc_templates"
+    data_templates = uploads / "doc_templates"
+    if bundled_templates.exists() and not data_templates.exists():
+        shutil.copytree(str(bundled_templates), str(data_templates))
+        print(f" * Copied seed templates to {data_templates}")
+
+    (uploads / "documents").mkdir(parents=True, exist_ok=True)
+    (uploads / "photos").mkdir(parents=True, exist_ok=True)
+    (uploads / "signatures").mkdir(parents=True, exist_ok=True)
+
     os.environ.setdefault("DATABASE_URL", f"sqlite:///{data / 'barangay.db'}")
     os.environ.setdefault("UPLOAD_FOLDER", str(uploads))
+    os.environ.setdefault("DOCX_TEMPLATE_UPLOAD_DIR", str(data_templates))
+    os.environ.setdefault("DOCX_OUTPUT_DIR", str(uploads / "documents"))
 
 
 class SecureHandler(WSGIRequestHandler):

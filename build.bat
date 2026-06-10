@@ -10,6 +10,7 @@ pyinstaller --onedir --noconsole --name "BarangaySystem" ^
   --add-data "frontend\templates;frontend\templates" ^
   --add-data "frontend\static;frontend\static" ^
   --add-data "migrations;migrations" ^
+  --add-data "frontend\static\uploads\doc_templates;frontend\static\uploads\doc_templates" ^
   --hidden-import flask ^
   --hidden-import flask_sqlalchemy ^
   --hidden-import flask_login ^
