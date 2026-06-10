@@ -1,83 +1,79 @@
 Barangay Document Management System - Deployment Instructions
 =============================================================
 
-Goal: Install once, then just double-click to run.
+Two ways to deploy: with Python installed, or as a standalone .exe.
 
 
-Step 1: Install Python
------------------------
-1. Go to https://python.org and download Python 3.10 or higher
-2. Run the installer
-3. CHECK "Add Python to PATH" at the bottom
-4. Click Install
+OPTION A: Python-based (requires Python 3.10+ on the PC)
+---------------------------------------------------------
+
+Step 1 — Install Python
+  1. Go to https://python.org and download Python 3.10+
+  2. Run installer, CHECK "Add Python to PATH", click Install
+
+Step 2 — Install Git
+  1. Go to https://git-scm.com and download Git for Windows
+  2. Run installer (default options)
+
+Step 3 — Deploy
+  Open Command Prompt and run:
+
+     cd C:\
+     git clone <repo-url> barangay
+     cd barangay
+
+     python -m venv venv
+     venv\Scripts\activate
+     pip install -r requirements.txt
+     set FLASK_APP=barangay_project/app.py
+     flask db upgrade
+     flask seed-admin
+
+Step 4 — Create desktop shortcut
+  Right-click desktop -> New -> Shortcut
+  Location: C:\barangay\start-ssl.bat
+  Name: Barangay System
+
+Step 5 — Run
+  Double-click the shortcut.
+  Browser opens at https://localhost:5000. 
+  Log in with admin / admin.
+  Mobile: https://<IP>:5000 (accept cert warning for camera).
 
 
-Step 2: Install Git
---------------------
-1. Go to https://git-scm.com and download Git for Windows
-2. Run the installer (default options are fine)
+OPTION B: Standalone .exe (no Python needed on target PC)
+----------------------------------------------------------
 
+Build the .exe once (on any machine with the source code):
 
-Step 3: Deploy (one-time setup)
---------------------------------
-Open Command Prompt and run:
-
-    cd C:\
-    git clone <repo-url> barangay
-    cd barangay
-
-    python -m venv venv
-    venv\Scripts\activate
-    pip install -r requirements.txt
-    set FLASK_APP=barangay_project/app.py
-    flask db upgrade
-    flask seed-admin
-
-
-Step 4: Create desktop shortcut
---------------------------------
-1. Right-click desktop -> New -> Shortcut
-2. For location, type:
-
-       C:\barangay\start-ssl.bat
-
-3. Click Next, name "Barangay System", click Finish
-
-
-Step 5: Run
-------------
-Double-click the "Barangay System" shortcut.
-
-- Server starts (HTTPS), browser opens at https://localhost:5000
-- Your IP is shown for mobile access via https://<IP>:5000
-- Accept the self-signed cert warning on mobile for camera use
-
-To stop: close the "Barangay Server" window.
-
-
-Build a standalone .exe (optional)
------------------------------------
-If you want to run without Python installed:
-
-1. Open Command Prompt in C:\barangay
-2. Run:
+  On Windows — open Command Prompt in the project folder and run:
 
        venv\Scripts\activate
        build.bat
 
-3. The .exe is at: dist\BarangaySystem\BarangaySystem.exe
-4. Create a desktop shortcut pointing to that .exe
-5. Double-click to run directly (no Python needed)
+  On Linux — from the project folder, run:
 
-The .exe is portable — copy the dist\BarangaySystem folder to
-any Windows PC and run BarangaySystem.exe directly.
+       bash build.sh       (requires Docker)
+
+The .exe will be at:  dist\BarangaySystem\BarangaySystem.exe
+
+Copy the entire dist\BarangaySystem\ folder to any Windows PC.
+
+On that PC:
+  - Create a desktop shortcut pointing to BarangaySystem.exe
+  - Double-click it to run
+
+  That's it. No Python, no Git, no setup needed.
+
+  First run: creates the database, seeds admin/admin user,
+  generates SSL cert, and opens the browser automatically.
 
 
 Notes
 -----
-- No external applications (LibreOffice, MySQL, openssl) needed.
-- All dependencies are Python libraries installed via pip.
-- Default database is SQLite (no database server required).
+- No external apps (LibreOffice, MySQL, openssl) needed.
+- Default database is SQLite (file stored in data/ folder).
 - HTTPS uses a Python-generated self-signed certificate.
-- PDF conversion (LibreOffice) is skipped if unavailable;
+- PDF conversion via LibreOffice is skipped if unavailable;
   the system serves .docx files instead.
+- Login: admin / admin  (change password after first login).
