@@ -34,6 +34,7 @@ from .docx_pipeline import (
     document_output_dir,
     preview_document_type_template,
     DocumentGenerationError,
+    parse_docx_placeholders,
 )
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -500,6 +501,26 @@ def _parse_validity_months(value) -> int | None:
         return None
 
 
+@admin_bp.route("/document-types/detect-placeholders", methods=["POST"])
+@login_required
+@roles_required("admin")
+def detect_template_placeholders():
+    upload = request.files.get("template_file")
+    if not upload or not upload.filename:
+        return {"success": False, "error": "No template file provided."}, 400
+    if not upload.filename.lower().endswith(".docx"):
+        return {"success": False, "error": "Only .docx files are supported."}, 400
+    try:
+        tmp_path = template_storage_dir() / f"_detect_{upload.filename}"
+        upload.save(str(tmp_path))
+        detected = sorted(parse_docx_placeholders(str(tmp_path)))
+        tmp_path.unlink(missing_ok=True)
+        return {"success": True, "placeholders": detected}
+    except Exception as exc:
+        current_app.logger.exception("Placeholder detection failed")
+        return {"success": False, "error": str(exc)}, 500
+
+
 @admin_bp.route("/document-types/add", methods=["GET", "POST"])
 @login_required
 @roles_required("admin")
@@ -535,6 +556,12 @@ def add_document_type():
             try:
                 template_path, template_filename = store_template_upload(upload, form.name.data.strip())
                 abs_template = resolve_stored_path_to_abs(template_path)
+                if not required_placeholders:
+                    detected = parse_docx_placeholders(str(abs_template))
+                    if detected:
+                        required_placeholders = detected
+                        placeholder_config_raw = json.dumps({"required": sorted(detected)})
+                        flash("Placeholders auto-detected from template: " + ", ".join(sorted(detected)), "info")
                 validation = validate_template_with_required(str(abs_template), required_placeholders, extra_allowed=_field_config_names(field_config_raw))
                 if validation["missing"]:
                     flash(
@@ -614,6 +641,12 @@ def edit_document_type(type_id: int):
             try:
                 template_path, template_filename = store_template_upload(upload, dt.name)
                 abs_template = resolve_stored_path_to_abs(template_path)
+                if not required_placeholders:
+                    detected = parse_docx_placeholders(str(abs_template))
+                    if detected:
+                        required_placeholders = detected
+                        placeholder_config_raw = json.dumps({"required": sorted(detected)})
+                        flash("Placeholders auto-detected from template: " + ", ".join(sorted(detected)), "info")
                 validation = validate_template_with_required(str(abs_template), required_placeholders, extra_allowed=_field_config_names(field_config_raw))
                 if validation["missing"]:
                     flash(
@@ -935,3 +968,28 @@ def delete_backup(filename: str):
         current_app.logger.exception("Failed to delete backup: %s", exc)
         flash(f"Failed to delete backup: {exc}", "danger")
     return redirect(url_for("admin.backups"))
+
+
+# ------------------------------
+# Settings
+# ------------------------------
+
+
+@admin_bp.route("/settings", methods=["GET", "POST"])
+@login_required
+@roles_required("admin")
+def settings():
+    from .settings import load_settings, save_settings
+
+    if request.method == "POST":
+        data = load_settings()
+        data["public_url"] = (request.form.get("public_url") or "").strip().rstrip("/")
+        data["barangay_name"] = (request.form.get("barangay_name") or "").strip() or data["barangay_name"]
+        data["system_name"] = (request.form.get("system_name") or "").strip() or data["system_name"]
+        save_settings(data)
+        log_action("Updated system settings", entity_type="settings", meta={"keys": list(data.keys())})
+        flash("Settings saved.", "success")
+        return redirect(url_for("admin.settings"))
+
+    data = load_settings()
+    return render_template("admin_settings.html", settings=data)

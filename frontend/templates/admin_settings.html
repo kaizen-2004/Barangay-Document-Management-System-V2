@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="bdm-form-card">
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="bdm-form-section mb-3">
+      <h3 class="bdm-form-section-title"><i class="fas fa-gear"></i> System Settings</h3>
+      <div class="bdm-form-grid">
+        <div class="form-group">
+          <label class="form-label" for="system_name">System Name</label>
+          <input class="form-control" type="text" id="system_name" name="system_name" value="{{ settings.system_name }}">
+          <div class="form-text">Displayed in the navbar and footer.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="barangay_name">Barangay Name</label>
+          <input class="form-control" type="text" id="barangay_name" name="barangay_name" value="{{ settings.barangay_name }}">
+          <div class="form-text">Displayed in the top bar and verification page.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bdm-form-section mb-3">
+      <h3 class="bdm-form-section-title"><i class="fas fa-qrcode"></i> QR Code Verification</h3>
+      <div class="bdm-form-grid">
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label class="form-label" for="public_url">Public Verification URL</label>
+          <input class="form-control" type="url" id="public_url" name="public_url" value="{{ settings.public_url }}" placeholder="https://drive.usercontent.google.com/download?id=YOUR_FILE_ID&export=view">
+          <div class="form-text">
+            When set, QR codes on printed documents link to this URL instead of the local server.
+            This makes QR codes work from any network, even after printing.
+          </div>
+          <div class="form-text mt-1">
+            <strong>Google Drive setup:</strong><br>
+            1. Run <code>python scripts/generate_verification_image.py</code> to create the image<br>
+            2. Upload to Google Drive → Share → "Anyone with the link"<br>
+            3. Copy the file ID from: <code>https://drive.google.com/file/d/<strong>FILE_ID</strong>/view</code><br>
+            4. Paste above as: <code>https://drive.usercontent.google.com/download?id=FILE_ID&export=view</code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bdm-form-actions">
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -51,6 +51,8 @@
       <select id="status" name="status" class="form-select">
         <option value="" {% if not status %}selected{% endif %}>All</option>
         <option value="draft" {% if status == "draft" %}selected{% endif %}>Draft</option>
+        <option value="pending" {% if status == "pending" %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if status == "approved" %}selected{% endif %}>Approved</option>
         <option value="issued" {% if status == "issued" %}selected{% endif %}>Issued</option>
       </select>
     </div>
@@ -148,8 +150,9 @@
             <td class="text-nowrap table-actions">
                 <div class="action-group">
                   <div class="action-main">
-                    {% if doc.status == "issued" and doc.file_path %}
-                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}" target="_blank" rel="noopener">Download</a>
+                    {% if doc.status == "issued" %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id, view=1) }}" target="_blank" rel="noopener">Preview</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.download_document_pdf', document_id=doc.id) }}">Download</a>
                     {% endif %}
                     {% if not doc.is_archived and doc.status == "issued" %}
                         <form method="POST" action="{{ url_for('main.revise_document', document_id=doc.id) }}" class="d-inline">
@@ -159,6 +162,18 @@
                     {% endif %}
                     {% if not doc.is_archived and doc.status in ["draft", "pending", "approved"] %}
                         <a class="btn btn-sm btn-primary" href="{{ url_for('main.edit_document', document_id=doc.id) }}">Edit</a>
+                    {% endif %}
+                    {% if not doc.is_archived and doc.status == "draft" %}
+                        <form method="POST" action="{{ url_for('main.request_document_approval', document_id=doc.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-warning">Request Approval</button>
+                        </form>
+                    {% endif %}
+                    {% if not doc.is_archived and doc.status == "pending" and current_user.role == "admin" %}
+                        <form method="POST" action="{{ url_for('main.approve_document', document_id=doc.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-info">Approve</button>
+                        </form>
                     {% endif %}
                     {% if not doc.is_archived and doc.status in ["draft", "pending", "approved"] %}
                         <form method="POST" action="{{ url_for('main.finalize_document_issue', document_id=doc.id) }}" class="d-inline">
@@ -202,7 +217,13 @@
 </div>
 </div>
 {% else %}
-<div class="bdm-empty-state-icon"><i class="fas fa-file-lines"></i><span>No documents found.</span></div>
+<div class="bdm-empty-state-icon">
+  <i class="fas fa-file-lines"></i>
+  <span>{{ 'No archived documents.' if archived_view else 'No documents found.' }}</span>
+  {% if not archived_view %}
+    <a class="btn btn-success btn-sm mt-2" href="{{ url_for('main.issue_document') }}"><i class="fas fa-file-pen me-1"></i> Create Draft</a>
+  {% endif %}
+</div>
 {% endif %}
 {% include '_pagination.html' %}
 
@@ -251,4 +272,15 @@
 })();
 </script>
 {% endif %}
+
+<script>
+(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('issued')) {
+    const cleanUrl = new URL(window.location);
+    cleanUrl.searchParams.delete('issued');
+    window.history.replaceState({}, '', cleanUrl);
+  }
+})();
+</script>
 {% endblock %}

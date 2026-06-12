@@ -4,14 +4,10 @@
 {% block content %}
 {% import "_log_helpers.html" as loghelpers %}
 
-<script>
-  document.write(`<style>.greeting-text::after{content:"Good day"}</style>`);
-</script>
-
   {# Hero welcome panel #}
   <div class="bdm-hero-card bdm-fade-in">
     <div>
-      <h1><span class="greeting-text"></span>, {{ current_user.username }}</h1>
+      <h1><span id="hero-greeting">Good day</span>, {{ current_user.username }}</h1>
       <p>Manage residents, documents and reports from your personalized dashboard.</p>
     </div>
     <div class="bdm-hero-meta" aria-label="Dashboard highlights">
@@ -33,6 +29,11 @@
       <span class="action-title">Create Draft</span>
       <span class="action-desc">Start a new document draft</span>
     </a>
+    <a class="bdm-action-card" href="{{ url_for('main.list_documents', status='draft') }}">
+      <span class="bdm-action-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-hourglass-half"></i></span>
+      <span class="action-title">Pending Review{% if pending_document_count %} <span class="bdm-action-badge">{{ pending_document_count }}</span>{% endif %}</span>
+      <span class="action-desc">Documents awaiting approval</span>
+    </a>
     <a class="bdm-action-card" href="{{ url_for('main.global_search') }}">
       <span class="bdm-action-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-magnifying-glass"></i></span>
       <span class="action-title">Search Records</span>
@@ -48,61 +49,117 @@
   {# Metric cards row #}
   <div class="row g-3 mb-4">
     <div class="col-12 col-sm-6 col-md-6 col-xl">
-      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+      <a href="{{ url_for('main.list_residents') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#fce4e4;color:#7f1d1d;"><i class="fas fa-users"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Active Residents</div>
           <div class="h2 fw-semibold mb-0">{{ resident_count }}</div>
-          <div class="text-muted small">Registered profiles</div>
+          <div class="small {% if resident_trend_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+            <i class="fas fa-arrow-{% if resident_trend_pct >= 0 %}up{% else %}down{% endif %}"></i>
+            {{ resident_trend_pct|abs }}% vs last month
+          </div>
         </div>
-        <a class="btn btn-primary btn-sm ms-auto" href="{{ url_for('main.list_residents') }}">Open</a>
-      </div>
+      </a>
     </div>
     <div class="col-12 col-sm-6 col-md-6 col-xl">
-      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+      <a href="{{ url_for('main.list_documents') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-file-lines"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Issued Documents</div>
           <div class="h2 fw-semibold mb-0">{{ document_count }}</div>
-          <div class="text-muted small">Certificates / clearances</div>
+          <div class="small {% if document_trend_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+            <i class="fas fa-arrow-{% if document_trend_pct >= 0 %}up{% else %}down{% endif %}"></i>
+            {{ document_trend_pct|abs }}% vs last month
+          </div>
         </div>
-        <a class="btn btn-success btn-sm ms-auto" href="{{ url_for('main.list_documents') }}">Open</a>
-      </div>
+      </a>
     </div>
     <div class="col-12 col-sm-6 col-md-6 col-xl">
-      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+      <a href="{{ url_for('main.reports') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#e0e7ff;color:#3730a3;"><i class="fas fa-calendar-check"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">This month</div>
           <div class="h2 fw-semibold mb-0">{{ documents_this_month }}</div>
           <div class="text-muted small">Documents issued</div>
         </div>
-        <a class="btn btn-outline-secondary btn-sm ms-auto" href="{{ url_for('main.reports') }}">Reports</a>
-      </div>
+      </a>
     </div>
     <div class="col-12 col-sm-6 col-md-6 col-xl">
-      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+      <a href="{{ url_for('main.list_documents', status='draft') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-pen"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Drafts</div>
           <div class="h2 fw-semibold mb-0">{{ draft_document_count }}</div>
           <div class="text-muted small">Pending documents</div>
         </div>
-        <a class="btn btn-outline-primary btn-sm ms-auto" href="{{ url_for('main.list_documents', status='draft') }}">Review</a>
-      </div>
+      </a>
     </div>
     <div class="col-12 col-sm-6 col-md-6 col-xl">
-      <div class="bdm-metric-card h-100 d-flex align-items-center gap-3">
+      <a href="{{ url_for('main.list_documents', status='draft') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
+        <span class="bdm-action-icon" style="background:#fef9c3;color:#854d0e;"><i class="fas fa-hourglass-half"></i></span>
+        <div class="flex-grow-1">
+          <div class="text-muted small">Pending Approval</div>
+          <div class="h2 fw-semibold mb-0">{{ pending_document_count }}</div>
+          <div class="text-muted small">Awaiting action</div>
+        </div>
+      </a>
+    </div>
+    <div class="col-12 col-sm-6 col-md-6 col-xl">
+      <a href="{{ url_for('main.list_archived_residents') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
         <span class="bdm-action-icon" style="background:#f1f5f9;color:#475569;"><i class="fas fa-archive"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Archived</div>
           <div class="h2 fw-semibold mb-0">{{ archived_resident_count + archived_document_count }}</div>
           <div class="text-muted small">Residents + documents</div>
         </div>
-        <a class="btn btn-outline-secondary btn-sm ms-auto" href="{{ url_for('main.list_archived_residents') }}">View</a>
+      </a>
+    </div>
+  </div>
+
+  {# Recent documents #}
+  {% if recent_documents %}
+  <div class="row g-3 mb-4">
+    <div class="col-12">
+      <div class="bdm-chart-card">
+        <div class="card-header bg-transparent d-flex align-items-center gap-2">
+          <i class="fas fa-clock-rotate-left text-primary"></i>
+          <span class="fw-semibold">Recent Documents</span>
+          <a class="btn btn-sm btn-outline-primary ms-auto" href="{{ url_for('main.list_documents') }}">View all</a>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Resident</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Last Updated</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for doc in recent_documents %}
+                <tr>
+                  <td>{{ doc.resident.last_name }}, {{ doc.resident.first_name }}</td>
+                  <td>{{ doc.document_type.name if doc.document_type else '—' }}</td>
+                  <td>
+                    <span class="bdm-status bdm-status-{{ doc.status }}">{{ doc.status|title }}</span>
+                  </td>
+                  <td class="text-muted small">{{ doc.updated_at.strftime('%b %d, %Y %I:%M %p') if doc.updated_at else '—' }}</td>
+                  <td class="text-end">
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.document_history', document_id=doc.id) }}">View</a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
+  {% endif %}
 
   {# Expiring documents alert #}
   {% if expiring_docs %}
@@ -196,14 +253,29 @@
     <div class="col-12 col-lg-4">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent">
+          <div class="fw-semibold"><i class="fas fa-users me-1"></i> Residents by age</div>
+          <div class="text-muted small">Age group distribution.</div>
+        </div>
+        <div class="card-body bdm-chart-body">
+          <canvas id="ageChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="bdm-chart-card h-100">
+        <div class="card-header bg-transparent">
           <div class="fw-semibold"><i class="fas fa-tasks me-1"></i> Document status</div>
-          <div class="text-muted small">Issued vs draft vs archived.</div>
+          <div class="text-muted small">Issued vs draft vs pending.</div>
         </div>
         <div class="card-body bdm-chart-body">
           <canvas id="statusChart"></canvas>
         </div>
       </div>
     </div>
+  </div>
+
+  {# Charts row 2 - document type + trends #}
+  <div class="row g-3 mb-4">
     <div class="col-12 col-lg-4">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent">
@@ -215,11 +287,7 @@
         </div>
       </div>
     </div>
-  </div>
-
-  {# Charts row 2 - trends #}
-  <div class="row g-3 mb-4">
-    <div class="col-12 col-lg-6">
+    <div class="col-12 col-lg-4">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent">
           <div class="fw-semibold"><i class="fas fa-chart-line me-1"></i> Documents trend</div>
@@ -230,7 +298,7 @@
         </div>
       </div>
     </div>
-    <div class="col-12 col-lg-6">
+    <div class="col-12 col-lg-4">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent">
           <div class="fw-semibold"><i class="fas fa-user-plus me-1"></i> Resident signups</div>
@@ -284,6 +352,14 @@
   {% endif %}
 
 <script>
+  (function() {
+    const el = document.getElementById('hero-greeting');
+    if (el) {
+      const h = new Date().getHours();
+      el.textContent = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    }
+  })();
+
   const charts = [];
   function getChartColors() {
     const s = getComputedStyle(document.documentElement);
@@ -328,6 +404,37 @@
     }));
   }
 
+  // Age demographics chart (bar)
+  const ageLabels = {{ age_labels | default([]) | tojson }};
+  const ageData = {{ age_values | default([]) | tojson }};
+  const ageCtx = document.getElementById('ageChart');
+  if (ageCtx) {
+    const cc = getChartColors();
+    charts.push(new Chart(ageCtx, {
+      type: 'bar',
+      data: {
+        labels: ageLabels,
+        datasets: [{
+          data: ageData,
+          backgroundColor: ['#86efac', '#93c5fd', '#fcd34d', '#fdba74', '#fca5a5'],
+          borderColor: ['#22c55e', '#3b82f6', '#eab308', '#f97316', '#ef4444'],
+          borderWidth: 1,
+          borderRadius: 8,
+          maxBarThickness: 54,
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: cc.text } },
+          y: { beginAtZero: true, ticks: { precision: 0, color: cc.text }, grid: { color: cc.grid } }
+        },
+        responsive: true,
+        maintainAspectRatio: false
+      }
+    }));
+  }
+
   // Status chart (doughnut)
   const statusLabels = {{ status_labels | default([]) | tojson }};
   const statusValues = {{ status_values | default([]) | tojson }};
@@ -340,7 +447,7 @@
         labels: statusLabels,
         datasets: [{
           data: statusValues,
-          backgroundColor: ['#22c55e', '#eab308', '#64748b'],
+          backgroundColor: ['#22c55e', '#eab308', '#f97316', '#64748b'],
           borderColor: '#ffffff',
           borderWidth: 4,
           hoverOffset: 6,

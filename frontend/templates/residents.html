@@ -201,7 +201,13 @@
 </div>
 </div>
 {% else %}
-<div class="bdm-empty-state-icon"><i class="fas fa-users"></i><span>No residents found. Click "Add Resident" to create one.</span></div>
+<div class="bdm-empty-state-icon">
+  <i class="fas fa-users"></i>
+  <span>{{ 'No archived residents.' if archived_view else 'No residents found.' }}</span>
+  {% if not archived_view %}
+    <a class="btn btn-primary btn-sm mt-2" href="{{ url_for('main.add_resident') }}"><i class="fas fa-user-plus me-1"></i> Add Resident</a>
+  {% endif %}
+</div>
 {% endif %}
 {% include '_pagination.html' %}
 

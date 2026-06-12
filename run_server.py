@@ -1,26 +1,26 @@
-"""Run Flask app with Waitress for local/production use.
+"""Run Flask app for local/production use.
 
 Usage:
-  python run_server.py                  # HTTP via Waitress
-  python run_server.py --ssl            # HTTPS via stdlib SSL server
-  python run_server.py --ssl --gen-cert # generate cert + HTTPS
+  python run_server.py                    # HTTP via Waitress (default)
+  python run_server.py --ssl              # HTTPS via werkzeug (auto-generates cert)
+  python run_server.py --ssl --gen-cert   # HTTPS + force regenerate cert
 
-No external applications required — cert generation uses Python cryptography library.
+Camera works on localhost without HTTPS. Install the system on each
+individual PC and access via http://localhost:5000.
 """
 
 import argparse
 import datetime
+import ipaddress
 import os
+import shutil
 import socket
 import ssl
 import sys
 import webbrowser
 from pathlib import Path
-from wsgiref.simple_server import make_server, WSGIRequestHandler
 
 from waitress import serve
-
-from barangay_project.app import create_app
 
 
 def _is_frozen() -> bool:
@@ -48,7 +48,7 @@ def _setup_frozen_env() -> None:
     if not _is_frozen():
         return
     data = _data_dir()
-    uploads = data / "uploads"
+    uploads = _app_dir() / "static" / "uploads"
     uploads.mkdir(parents=True, exist_ok=True)
 
     # Copy seed doc_templates from bundle to writable data dir on first run
@@ -64,18 +64,23 @@ def _setup_frozen_env() -> None:
 
     os.environ.setdefault("DATABASE_URL", f"sqlite:///{data / 'barangay.db'}")
     os.environ.setdefault("UPLOAD_FOLDER", str(uploads))
-    os.environ.setdefault("DOCX_TEMPLATE_UPLOAD_DIR", str(data_templates))
-    os.environ.setdefault("DOCX_OUTPUT_DIR", str(uploads / "documents"))
+    os.environ.setdefault("DOCUMENT_STORAGE_ROOT", str(data / "documents"))
+    os.environ.setdefault("DOCX_TEMPLATE_UPLOAD_DIR", str(data / "templates"))
+    os.environ.setdefault("DOCX_OUTPUT_DIR", str(data / "generated"))
 
+    # Expose templates and static next to exe for easy editing
+    _meipass = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent / "_internal"))
+    tpl_src = _meipass / "frontend" / "templates"
+    tpl_dst = _app_dir() / "templates"
+    if tpl_src.is_dir():
+        shutil.copytree(tpl_src, tpl_dst, dirs_exist_ok=True)
+    os.environ.setdefault("BARANGAY_TEMPLATES_DIR", str(tpl_dst))
 
-class SecureHandler(WSGIRequestHandler):
-    def make_environ(self):
-        environ = super().make_environ()
-        environ["wsgi.url_scheme"] = "https"
-        return environ
-
-    def log_message(self, fmt, *args):
-        print(f"[{self.log_date_time_string()}] {fmt % args}")
+    static_src = _meipass / "frontend" / "static"
+    static_dst = _app_dir() / "static"
+    if static_src.is_dir():
+        shutil.copytree(static_src, static_dst, dirs_exist_ok=True)
+    os.environ.setdefault("BARANGAY_STATIC_DIR", str(static_dst))
 
 
 def _get_local_ips():
@@ -110,6 +115,13 @@ def _generate_cert(cert_path: Path, key_path: Path) -> None:
 
     now = datetime.datetime.now(datetime.timezone.utc)
 
+    san_entries = [x509.DNSName("localhost")]
+    for ip_str in _get_local_ips():
+        try:
+            san_entries.append(x509.IPAddress(ipaddress.ip_address(ip_str)))
+        except ValueError:
+            pass
+
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)
@@ -118,7 +130,7 @@ def _generate_cert(cert_path: Path, key_path: Path) -> None:
         .serial_number(x509.random_serial_number())
         .not_valid_before(now)
         .not_valid_after(now + datetime.timedelta(days=365))
-        .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
+        .add_extension(x509.SubjectAlternativeName(san_entries), critical=False)
         .sign(key, hashes.SHA256())
     )
 
@@ -130,31 +142,51 @@ def _generate_cert(cert_path: Path, key_path: Path) -> None:
         )
     )
     cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
-    print(f" * Self-signed cert generated: {cert_path.name}")
+    # Also save as .crt so Windows recognizes it on double-click
+    crt_path = cert_path.with_suffix(".crt")
+    crt_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    print(f" * Self-signed cert generated: {cert_path.name} (also {crt_path.name})")
+
+
+def _port_in_use(host: str, port: int) -> bool:
+    """Check if a port is already bound by another process."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.bind((host, port))
+        return False
+    except OSError:
+        return True
+    finally:
+        s.close()
 
 
 def main() -> None:
     _setup_frozen_env()
 
-    parser = argparse.ArgumentParser(description="Run the Barangay app server")
-    parser.add_argument("--ssl", action="store_true", help="Serve via HTTPS (self-signed cert)")
-    parser.add_argument("--gen-cert", action="store_true", help="Generate self-signed cert before starting")
-    args, _ = parser.parse_known_args()
+    from barangay_project.app import create_app
 
-    # When bundled as .exe, default to SSL with cert generation
-    if _is_frozen():
-        args.ssl = True
-        if not os.environ.get("SKIP_GEN_CERT"):
-            args.gen_cert = True
+    parser = argparse.ArgumentParser(description="Run the Barangay app server")
+    parser.add_argument("--ssl", action="store_true", help="Serve via HTTPS (auto-generates self-signed cert)")
+    parser.add_argument("--gen-cert", action="store_true", help="Force regenerate the self-signed certificate")
+    args, _ = parser.parse_known_args()
 
     app = create_app()
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "5000"))
 
+    if _port_in_use(host, port):
+        print(f"\n ERROR: Port {port} is already in use.")
+        print(f" Another server instance may be running. Close it first.\n")
+        sys.exit(1)
+
+    ips = _get_local_ips()
+    cert_dir = _data_dir()
+    cert_file = cert_dir / "cert.pem"
+    key_file = cert_dir / "key.pem"
+
     if args.ssl:
-        cert_dir = _data_dir()
-        cert_file = cert_dir / "cert.pem"
-        key_file = cert_dir / "key.pem"
+        from werkzeug.serving import run_simple
 
         if args.gen_cert or not (cert_file.exists() and key_file.exists()):
             _generate_cert(cert_file, key_file)
@@ -162,22 +194,23 @@ def main() -> None:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(str(cert_file), str(key_file))
 
-        server = make_server(host, port, app, handler_class=SecureHandler)
-        server.socket = ctx.wrap_socket(server.socket, server_side=True)
-
-        ips = _get_local_ips()
         urls = "\n".join(f"  https://{ip}:{port}" for ip in ips)
         print(f"\n * HTTPS server on port {port}")
         print(f" * Access via:\n{urls}\n")
-        print(" * Accept the self-signed cert warning in your browser.\n")
+        print(f" * To remove browser warning, install cert on each PC:\n"
+              f"    1. Copy {cert_file.with_suffix('.crt')} to the client PC\n"
+              f"    2. Double-click cert.crt\n"
+              f"    3. Click 'Install Certificate' > Local Machine\n"
+              f"    4. Place in 'Trusted Root Certification Authorities'\n"
+              f"    5. Restart browser\n")
 
         webbrowser.open(f"https://localhost:{port}")
-        server.serve_forever()
+        run_simple(host, port, app, ssl_context=ctx, threaded=True)
     else:
-        ips = _get_local_ips()
         urls = "\n".join(f"  http://{ip}:{port}" for ip in ips)
         print(f"\n * HTTP server on port {port}")
-        print(f" * Access via:\n{urls}\n")
+        print(f" * Access via:\n{urls}")
+        print(f" * Camera works on localhost:\n     http://localhost:{port}\n")
         webbrowser.open(f"http://localhost:{port}")
         serve(app, host=host, port=port)
 

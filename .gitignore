@@ -36,4 +36,12 @@ template_assets/
 a.out
 barangay_data/
 barangay_project.egg-info/
-
+frontend/static/uploads/
+build/
+dist/
+instance/
+nul
+*.spec
+.mimocode/
+todo.md
+session-*.md

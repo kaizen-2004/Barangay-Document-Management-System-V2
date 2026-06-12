@@ -283,9 +283,19 @@ main.container{
 }
 
 .bdm-topbar-clock{
-  font-weight: 700;
-  letter-spacing: 0.03rem;
+  font-weight: 800;
+  letter-spacing: 0.04rem;
   white-space: nowrap;
+  font-size: 1.05rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+  padding: 0.4rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .navbar-nav .nav-link:hover,
@@ -827,6 +837,18 @@ footer{
   background: var(--bdm-surface);
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
 }
+a.bdm-metric-link{
+  text-decoration: none;
+  color: var(--bdm-text);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+a.bdm-metric-link:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  border-color: rgba(163, 32, 32, 0.28);
+  text-decoration: none;
+  color: var(--bdm-text);
+}
 .bdm-metric-icon{
   width: 2.75rem;
   height: 2.75rem;
@@ -1284,6 +1306,23 @@ footer{
   background: #ffffff;
 }
 
+/* Sidebar notification badge */
+.bdm-sidebar-badge{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-left: auto;
+}
+
 /* App header wrapping breadcrumbs, search and actions */
 .bdm-app-header{
   display: flex;
@@ -1328,9 +1367,27 @@ footer{
 .bdm-quick-search{
   flex: 1 1 240px;
   max-width: 320px;
+  position: relative;
 }
 .bdm-quick-search .form-control{
   border-radius: 8px;
+  padding-right: 3.5rem;
+}
+.bdm-quick-search::after{
+  content: 'Ctrl+K';
+  position: absolute;
+  right: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--bdm-muted);
+  background: var(--bdm-surface-muted);
+  border: 1px solid var(--bdm-border);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  pointer-events: none;
+  line-height: 1.3;
 }
 .bdm-quick-search .input-group-text{
   border: 1px solid var(--bdm-border);
@@ -1376,6 +1433,26 @@ footer{
     width: 100%;
     justify-content: space-between;
   }
+  .bdm-header-user-text{
+    text-align: left;
+  }
+}
+.bdm-header-user{
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.bdm-header-user-text{
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  text-align: right;
+}
+.bdm-header-user-text span{
+  font-size: 0.78rem;
+  color: var(--bdm-muted);
+}
   .bdm-header-user-text{
     text-align: left;
   }
@@ -1440,7 +1517,7 @@ footer{
 /* Quick action cards grid */
 .bdm-quick-actions{
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 1.25rem;
   margin-bottom: 1.6rem;
   width: 100%;
@@ -1504,6 +1581,23 @@ footer{
   .bdm-quick-actions{
     grid-template-columns: 1fr;
   }
+}
+
+/* Badge inside quick action cards */
+.bdm-action-badge{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: middle;
 }
 
 /* Timeline component */
@@ -2273,6 +2367,33 @@ footer{
   border-top-color: #fff;
   border-radius: 50%;
   animation: bdmSpinner 0.6s linear infinite;
+}
+
+/* --------------------------------------------------------------------------
+   Photo processing spinner overlay
+--------------------------------------------------------------------------- */
+.bdm-processing-overlay{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2.5rem 1rem;
+  background: rgba(255,255,255,0.92);
+  border-radius: 0.5rem;
+}
+.bdm-processing-spinner{
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid rgba(163,32,32,0.2);
+  border-top-color: #a32020;
+  border-radius: 50%;
+  animation: bdmSpinner 0.6s linear infinite;
+}
+.bdm-processing-text{
+  color: #6c757d;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 /* --------------------------------------------------------------------------

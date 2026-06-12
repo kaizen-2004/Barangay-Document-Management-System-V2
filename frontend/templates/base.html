@@ -102,6 +102,9 @@
           <a class="nav-link text-white{% if request.endpoint == 'admin.backups' %} active{% endif %}" href="{{ url_for('admin.backups') }}">
             <i class="fas fa-database me-2"></i> Backups
           </a>
+          <a class="nav-link text-white{% if request.endpoint == 'admin.settings' %} active{% endif %}" href="{{ url_for('admin.settings') }}">
+            <i class="fas fa-gear me-2"></i> Settings
+          </a>
         {% endif %}
       {% else %}
         <a class="nav-link text-white{% if request.endpoint == 'auth.login' %} active{% endif %}" href="{{ url_for('auth.login') }}">
@@ -124,50 +127,54 @@
       <nav class="nav flex-column flex-grow-1">
         {# Main section #}
         <div class="bdm-sidebar-section-title bdm-sidebar-section">Main</div>
-        <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'main.index' %} active{% endif %}" href="{{ url_for('main.index') }}">
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'main.index' %} active{% endif %}" href="{{ url_for('main.index') }}" title="Dashboard">
           <i class="fas fa-gauge-high"></i> <span class="bdm-link-text">Dashboard</span>
         </a>
-        <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'main.global_search' %} active{% endif %}" href="{{ url_for('main.global_search') }}">
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'main.global_search' %} active{% endif %}" href="{{ url_for('main.global_search') }}" title="Search">
           <i class="fas fa-magnifying-glass"></i> <span class="bdm-link-text">Search</span>
         </a>
         {# Records section #}
         <div class="bdm-sidebar-section-title bdm-sidebar-section">Records</div>
-        <a class="nav-link bdm-sidebar-link{% if request.endpoint in ['main.list_residents','main.list_archived_residents'] %} active{% endif %}" href="{{ url_for('main.list_residents') }}">
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint in ['main.list_residents','main.list_archived_residents'] %} active{% endif %}" href="{{ url_for('main.list_residents') }}" title="Residents">
           <i class="fas fa-users"></i> <span class="bdm-link-text">Residents</span>
         </a>
         {# Documents section #}
         <div class="bdm-sidebar-section-title bdm-sidebar-section">Documents</div>
-        <a class="nav-link bdm-sidebar-link{% if request.endpoint in ['main.list_documents','main.list_archived_documents'] %} active{% endif %}" href="{{ url_for('main.list_documents') }}">
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint in ['main.list_documents','main.list_archived_documents'] %} active{% endif %}" href="{{ url_for('main.list_documents') }}" title="Documents">
           <i class="fas fa-file-lines"></i> <span class="bdm-link-text">Documents</span>
+          {% if sidebar_pending_count %}<span class="bdm-sidebar-badge">{{ sidebar_pending_count }}</span>{% endif %}
         </a>
         {# Reports section #}
         <div class="bdm-sidebar-section-title bdm-sidebar-section">Reports</div>
-        <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'main.reports' %} active{% endif %}" href="{{ url_for('main.reports') }}">
+        <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'main.reports' %} active{% endif %}" href="{{ url_for('main.reports') }}" title="Reports">
           <i class="fas fa-chart-bar"></i> <span class="bdm-link-text">Reports</span>
         </a>
         {# Admin section #}
         {% if current_user.role == 'admin' %}
           <div class="bdm-sidebar-section-title bdm-sidebar-section">Admin</div>
-          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_users' %} active{% endif %}" href="{{ url_for('admin.list_users') }}">
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_users' %} active{% endif %}" href="{{ url_for('admin.list_users') }}" title="Users">
             <i class="fas fa-users-gear"></i> <span class="bdm-link-text">Users</span>
           </a>
-          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_document_types' %} active{% endif %}" href="{{ url_for('admin.list_document_types') }}">
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_document_types' %} active{% endif %}" href="{{ url_for('admin.list_document_types') }}" title="Document Types">
             <i class="fas fa-file-pen"></i> <span class="bdm-link-text">Doc Types</span>
           </a>
-          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_placeholders' %} active{% endif %}" href="{{ url_for('admin.list_placeholders') }}">
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_placeholders' %} active{% endif %}" href="{{ url_for('admin.list_placeholders') }}" title="Placeholders">
             <i class="fas fa-keyboard"></i> <span class="bdm-link-text">Placeholders</span>
           </a>
-          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_officials' %} active{% endif %}" href="{{ url_for('admin.list_officials') }}">
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.list_officials' %} active{% endif %}" href="{{ url_for('admin.list_officials') }}" title="Officials">
             <i class="fas fa-user-tie"></i> <span class="bdm-link-text">Officials</span>
           </a>
-          <a class="nav-link bdm-sidebar-link{% if request.endpoint in ['admin.list_streets','admin.add_street','admin.edit_street'] %} active{% endif %}" href="{{ url_for('admin.list_streets') }}">
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint in ['admin.list_streets','admin.add_street','admin.edit_street'] %} active{% endif %}" href="{{ url_for('admin.list_streets') }}" title="Streets">
             <i class="fas fa-road"></i> <span class="bdm-link-text">Streets</span>
           </a>
-          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.audit_logs' %} active{% endif %}" href="{{ url_for('admin.audit_logs') }}">
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.audit_logs' %} active{% endif %}" href="{{ url_for('admin.audit_logs') }}" title="Audit Logs">
             <i class="fas fa-clock-rotate-left"></i> <span class="bdm-link-text">Audit Logs</span>
           </a>
-          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.backups' %} active{% endif %}" href="{{ url_for('admin.backups') }}">
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.backups' %} active{% endif %}" href="{{ url_for('admin.backups') }}" title="Backups">
             <i class="fas fa-database"></i> <span class="bdm-link-text">Backups</span>
+          </a>
+          <a class="nav-link bdm-sidebar-link{% if request.endpoint == 'admin.settings' %} active{% endif %}" href="{{ url_for('admin.settings') }}" title="Settings">
+            <i class="fas fa-gear"></i> <span class="bdm-link-text">Settings</span>
           </a>
         {% endif %}
       </nav>
@@ -218,7 +225,8 @@
           'admin.add_street': 'Add Street',
           'admin.edit_street': 'Edit Street',
           'admin.audit_logs': 'Audit Logs',
-          'admin.backups': 'Backups'
+          'admin.backups': 'Backups',
+          'admin.settings': 'Settings'
         } %}
         {% set page_title = page_title_map.get(endpoint, 'Dashboard') %}
         {% set section = 'Admin' if endpoint.startswith('admin.') else 'Main' %}
@@ -235,7 +243,7 @@
             </div>
             <form class="bdm-quick-search" role="search" method="GET" action="{{ url_for('main.global_search') }}">
               <div class="input-group">
-                <input class="form-control" type="search" name="q" placeholder="Quick search" aria-label="Quick search">
+                <input class="form-control" type="search" name="q" placeholder="Quick search (Ctrl+K)" aria-label="Quick search">
               </div>
             </form>
             <div class="bdm-app-actions" aria-label="Quick actions">
@@ -305,12 +313,9 @@
         } else {
           input.type = 'password';
           this.innerHTML = '<i class="fas fa-eye"></i>';
-      }
+        }
+      });
     });
-
-    /* Print button */
-    document.getElementById('printBtn')?.addEventListener('click', () => window.print());
-  });
   });
 
   window.addEventListener('load', () => {
@@ -330,21 +335,24 @@
     if (clocks.length) {
       const formatNow = () => {
         const now = new Date();
-        const text = now.toLocaleString('en-PH', {
-          year: 'numeric',
-          month: 'short',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        });
+        const time = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const date = now.toLocaleDateString('en-PH', { weekday: 'short', year: 'numeric', month: 'short', day: '2-digit' });
         clocks.forEach((clock) => {
-          clock.textContent = text;
+          clock.innerHTML = '<span>' + time + '</span><span style="font-size:0.82rem;font-weight:700;opacity:0.85;">' + date + '</span>';
         });
       };
       formatNow();
       setInterval(formatNow, 1000);
     }
+
+    /* Ctrl+K / Cmd+K search shortcut */
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchInput = document.querySelector('.bdm-quick-search input');
+        if (searchInput) searchInput.focus();
+      }
+    });
 
     /* Theme toggle */
     const themeToggle = document.getElementById('themeToggle');

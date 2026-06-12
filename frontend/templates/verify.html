@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Document Verification - {{ barangay_name }}</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iOCIgZmlsbD0iI2EzMjAyMCIvPjxwYXRoIGQ9Ik0xOCAyOGg0djE4aC00em04LTZoNHYyNGgtNHptOC02aDR2MzBoLTR6bTggNGg0djI2aC00eiIgZmlsbD0iI2ZmZiIvPjwvc3ZnPg==">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #a32020;
+      --primary-dark: #7a1818;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --text: #333;
+      --text-muted: #6c757d;
+      --border: #dee2e6;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Manrope', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+    .verify-container {
+      max-width: 560px;
+      width: 100%;
+    }
+    .verify-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .verify-header .logo-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .verify-header .logo-row img {
+      height: 48px;
+      border-radius: 6px;
+    }
+    .verify-header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .verify-header .subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .verify-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    .verify-card-header {
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .verify-card-header.valid {
+      background: #f0fdf4;
+      color: #166534;
+      border-bottom: 1px solid #bbf7d0;
+    }
+    .verify-card-header.invalid {
+      background: #fef2f2;
+      color: #991b1b;
+      border-bottom: 1px solid #fecaca;
+    }
+    .verify-card-header .icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+    .verify-card-header.valid .icon {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .verify-card-header.invalid .icon {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .verify-card-body {
+      padding: 1.5rem;
+    }
+    .verify-detail {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid #f1f3f5;
+    }
+    .verify-detail:last-child {
+      border-bottom: none;
+    }
+    .verify-detail .label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .verify-detail .value {
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-align: right;
+      color: var(--text);
+    }
+    .verify-error {
+      text-align: center;
+      padding: 2rem 1.5rem;
+    }
+    .verify-error p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 0.5rem;
+    }
+    .verify-footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    @media print {
+      body { padding: 0; background: white; }
+      .verify-card { box-shadow: none; border: 1px solid #ccc; }
+    }
+  </style>
+</head>
+<body>
+  <div class="verify-container">
+    <div class="verify-header">
+      <div class="logo-row">
+        <img src="/static/logo/logo.jpg" alt="Logo">
+        <img src="/static/logo/renz-logo.png" alt="Logo">
+      </div>
+      <h1>Document Verification</h1>
+      <div class="subtitle">{{ barangay_name }}</div>
+    </div>
+
+    <div class="verify-card">
+      {% if valid %}
+        <div class="verify-card-header valid">
+          <div class="icon"><i class="fas fa-check-circle"></i></div>
+          <div>
+            <div>Document is Authentic</div>
+            <div style="font-size:0.75rem;font-weight:500;opacity:0.8;">Verified successfully</div>
+          </div>
+        </div>
+        <div class="verify-card-body">
+          <div class="verify-detail">
+            <span class="label">Document ID</span>
+            <span class="value">{{ knl_id }}</span>
+          </div>
+          <div class="verify-detail">
+            <span class="label">Document Type</span>
+            <span class="value">{{ doc_type_name }}</span>
+          </div>
+          <div class="verify-detail">
+            <span class="label">Resident</span>
+            <span class="value">{{ resident_name }}</span>
+          </div>
+          <div class="verify-detail">
+            <span class="label">Issue Date</span>
+            <span class="value">{{ issue_date.strftime('%B %d, %Y') if issue_date else 'N/A' }}</span>
+          </div>
+          {% if expiry_date %}
+          <div class="verify-detail">
+            <span class="label">Valid Until</span>
+            <span class="value">{{ expiry_date.strftime('%B %d, %Y') }}</span>
+          </div>
+          {% endif %}
+          <div class="verify-detail">
+            <span class="label">Internal Ref</span>
+            <span class="value" style="font-family:monospace;font-size:0.8rem;">DOC-{{ '%05d' % document_id }}</span>
+          </div>
+        </div>
+      {% else %}
+        <div class="verify-card-header invalid">
+          <div class="icon"><i class="fas fa-times-circle"></i></div>
+          <div>
+            <div>Document Not Verified</div>
+            <div style="font-size:0.75rem;font-weight:500;opacity:0.8;">Verification failed</div>
+          </div>
+        </div>
+        <div class="verify-card-body">
+          <div class="verify-error">
+            <i class="fas fa-exclamation-triangle" style="font-size:2rem;color:#f59e0b;"></i>
+            <p>{{ error }}</p>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="verify-footer">
+      Scanned via {{ barangay_name }} Document Management System
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+</body>
+</html>

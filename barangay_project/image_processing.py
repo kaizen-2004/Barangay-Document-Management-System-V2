@@ -36,22 +36,54 @@ _LEVEL_TO_PIPELINE_PRESET = {
 }
 
 
+def _resize_for_speed(source: bytes, max_dim: int = 800) -> bytes:
+    if max_dim < 1:
+        return source
+    img = Image.open(BytesIO(source))
+    img = ImageOps.exif_transpose(img)
+    w, h = img.size
+    if max(w, h) <= max_dim:
+        return source
+    ratio = max_dim / max(w, h)
+    img = img.resize((int(w * ratio), int(h * ratio)), Image.Resampling.LANCZOS)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def _remove_background(source: bytes, level: int = 2) -> bytes:
     global _REMBG_SESSION
+    import sys
+    import os as _os
+    if getattr(sys, 'frozen', False):
+        _capi = _os.path.join(sys._MEIPASS, 'onnxruntime', 'capi')
+        if _os.path.isdir(_capi):
+            _os.add_dll_directory(_capi)
     from rembg import new_session, remove
 
-    if _REMBG_SESSION is None:
-        _REMBG_SESSION = new_session("birefnet-general")
+    max_dim = int(_os.environ.get("BG_REMOVAL_MAX_DIMENSION", "320"))
+    source = _resize_for_speed(source, max_dim)
 
-    preset = _REMOVAL_PRESETS.get(level, _REMOVAL_PRESETS[2])
+    if _REMBG_SESSION is None:
+        _REMBG_SESSION = new_session("u2net_human_seg")
+
+    use_alpha_matting = _os.environ.get("BG_USE_ALPHA_MATTING", "true").lower() in ("1", "true", "yes")
+    if use_alpha_matting:
+        preset = _REMOVAL_PRESETS.get(level, _REMOVAL_PRESETS[2])
+        return remove(
+            source,
+            session=_REMBG_SESSION,
+            alpha_matting=True,
+            alpha_matting_foreground_threshold=preset["alpha_matting_foreground_threshold"],
+            alpha_matting_background_threshold=preset["alpha_matting_background_threshold"],
+            alpha_matting_erode_size=preset["alpha_matting_erode_size"],
+            post_process_mask=True,
+        )
     return remove(
         source,
         session=_REMBG_SESSION,
-        alpha_matting=True,
-        alpha_matting_foreground_threshold=preset["alpha_matting_foreground_threshold"],
-        alpha_matting_background_threshold=preset["alpha_matting_background_threshold"],
-        alpha_matting_erode_size=preset["alpha_matting_erode_size"],
-        post_process_mask=True,
+        alpha_matting=False,
+        post_process_mask=False,
     )
 
 

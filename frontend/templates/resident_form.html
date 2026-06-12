@@ -41,6 +41,8 @@
                       <input type="range" id="crop_x" class="form-range" min="-1" max="1" step="0.02" value="0" disabled>
                       <label for="crop_y">Move Up / Down</label>
                       <input type="range" id="crop_y" class="form-range" min="-1" max="1" step="0.02" value="0" disabled>
+                      <label for="crop_rotate">Rotate</label>
+                      <input type="range" id="crop_rotate" class="form-range" min="-180" max="180" step="1" value="0" disabled>
                       <label for="removal_level">Background Removal</label>
                       <input type="range" id="removal_level" class="form-range" min="1" max="3" step="1" value="2" disabled>
                       <div class="d-flex justify-content-between">
@@ -56,8 +58,17 @@
                     <div class="bdm-camera-panel-title">3. Processed Preview</div>
                     <div class="bdm-camera-frame">
                       <img id="photo_preview" alt="Processed preview" />
+                      <div id="photo_processing_indicator" class="bdm-processing-overlay" style="display:none;">
+                        <div class="bdm-processing-spinner"></div>
+                        <div class="bdm-processing-text">Removing background…</div>
+                      </div>
                     </div>
                     <div class="form-text mt-2">This white-background photo is what will be saved.</div>
+                    <div class="bdm-camera-actions mt-2">
+                      <input type="file" id="fallback_upload" accept="image/png,image/jpeg,image/jpg" style="display:none;">
+                      <button type="button" id="btn_fallback_upload" class="btn btn-outline-secondary btn-sm">Upload Processed Photo</button>
+                      <small class="text-muted ms-1">Fallback: upload a pre-processed white-background photo.</small>
+                    </div>
                 </div>
         </div>
     </div>
@@ -71,14 +82,14 @@
         </div>
         <div class="bdm-camera-grid">
             <div class="bdm-camera-panel bdm-sig-panel">
-                <canvas id="sigCanvas" width="600" height="200"
-                    style="width:100%; height:auto; aspect-ratio:3/1; border:2px solid #ccc; border-radius:0.5rem; cursor:crosshair; touch-action:none;"></canvas>
+                <canvas id="sigCanvas" width="500" height="150"
+                    style="width:100%; height:auto; aspect-ratio:10/3; border:2px solid #ccc; border-radius:0.5rem; cursor:crosshair; touch-action:none;"></canvas>
                 <div class="bdm-camera-actions mt-2">
                     <button type="button" id="btnClearSig" class="btn btn-outline-secondary btn-sm">Clear</button>
                     <button type="button" id="btnSaveSig" class="btn btn-success btn-sm">Save Signature</button>
                 </div>
                 <div class="form-text mt-2">Sign above, then click "Save Signature". A preview will appear below.</div>
-                <img id="sigPreview" style="display:none; max-height:3.75rem; margin-top:0.5rem; border:1px solid #ddd; border-radius:0.25rem; padding:0.25rem;" />
+                <img id="sigPreview" style="display:none; max-width:100%; height:auto; max-height:3.75rem; margin-top:0.5rem; border:1px solid #ddd; border-radius:0.25rem; padding:0.25rem;" />
                 {{ form.signature_data(id='signature_data') }}
             </div>
         </div>
@@ -241,17 +252,21 @@
   const canvas = document.getElementById('cam_canvas');
   const capturedPreview = document.getElementById('captured_preview');
   const processedPreview = document.getElementById('photo_preview');
+  const processingIndicator = document.getElementById('photo_processing_indicator');
   const photoData = document.getElementById('photo_data');
   const status = document.getElementById('camera_status');
   const cropZoom = document.getElementById('crop_zoom');
   const cropX = document.getElementById('crop_x');
   const cropY = document.getElementById('crop_y');
+  const cropRotate = document.getElementById('crop_rotate');
   const removalLevel = document.getElementById('removal_level');
 
   const btnStart = document.getElementById('btn_start');
   const btnCapture = document.getElementById('btn_capture');
   const btnRetake = document.getElementById('btn_retake');
   const btnUsePhoto = document.getElementById('btn_use_photo');
+  const fallbackUpload = document.getElementById('fallback_upload');
+  const btnFallbackUpload = document.getElementById('btn_fallback_upload');
 
   let stream = null;
   let capturedDataUrl = '';
@@ -272,12 +287,12 @@
   }
 
   function isSecureContext() {
-    return window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    return window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
   }
 
   async function startCamera() {
     if (!isSecureContext()) {
-      setStatus('Camera requires HTTPS. Run with --ssl flag (see README).', true);
+      setStatus('Camera requires HTTPS. For network access, use the start-ssl.bat launcher or configure a self-signed SSL certificate. On localhost, the camera works directly.', true);
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -338,6 +353,8 @@
       cropZoom.value = '1.2';
       cropX.value = '0';
       cropY.value = '0';
+      cropRotate.disabled = false;
+      cropRotate.value = '0';
       removalLevel.disabled = false;
       processedPreview.removeAttribute('src');
     btnRetake.disabled = false;
@@ -356,6 +373,7 @@
     cropZoom.disabled = true;
     cropX.disabled = true;
       cropY.disabled = true;
+      cropRotate.disabled = true;
       removalLevel.disabled = true;
       btnRetake.disabled = true;
     btnUsePhoto.disabled = true;
@@ -374,7 +392,12 @@
     const maxY = Math.max(0, cropImage.naturalHeight - sourceSide);
     const sx = Math.max(0, Math.min(maxX, (maxX / 2) + Number(cropX.value || 0) * (maxX / 2)));
     const sy = Math.max(0, Math.min(maxY, (maxY / 2) + Number(cropY.value || 0) * (maxY / 2)));
-    ctx.drawImage(cropImage, sx, sy, sourceSide, sourceSide, 0, 0, targetSize, targetSize);
+    ctx.save();
+    const angle = Number(cropRotate.value || 0) * Math.PI / 180;
+    ctx.translate(targetSize / 2, targetSize / 2);
+    ctx.rotate(angle);
+    ctx.drawImage(cropImage, sx, sy, sourceSide, sourceSide, -targetSize / 2, -targetSize / 2, targetSize, targetSize);
+    ctx.restore();
     capturedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
     capturedPreview.src = capturedDataUrl;
   }
@@ -399,12 +422,20 @@
     if (processing || !capturedDataUrl) return;
     processing = true;
     btnUsePhoto.disabled = true;
+    btnUsePhoto.classList.add('btn-loading');
+    processedPreview.style.display = 'none';
+    if (processingIndicator) processingIndicator.style.display = 'flex';
     setStatus('Removing background. Please wait...');
     try {
       const body = { image_data: capturedDataUrl, removal_level: Number(removalLevel.value) || 2 };
       if (currentOriginalPath && currentProcessedPath) {
         body.original_path = currentOriginalPath;
         body.processed_path = currentProcessedPath;
+      }
+      if (window.segmentPhoto) {
+        setStatus('Removing background (browser)...');
+        body.image_data = await window.segmentPhoto(capturedDataUrl);
+        body.pipe_processed = true;
       }
       const response = await fetch('{{ url_for("main.capture_process_photo") }}', {
         method: 'POST',
@@ -420,12 +451,15 @@
       currentProcessedPath = payload.processed_image_path || '';
       photoData.value = payload.processed_image_path;
       processedPreview.src = payload.processed_image_url;
+      processedPreview.style.display = 'block';
       setStatus(payload.warning || 'Background removed. Adjust crop/zoom and click Remove Background again if needed.');
     } catch (err) {
       setStatus(err.message || 'Background removal failed. Please retake the photo.', true);
     } finally {
       processing = false;
       btnUsePhoto.disabled = false;
+      btnUsePhoto.classList.remove('btn-loading');
+      if (processingIndicator) processingIndicator.style.display = 'none';
     }
   }
 
@@ -433,9 +467,34 @@
   btnCapture?.addEventListener('click', capture);
   btnRetake?.addEventListener('click', retakeCapture);
   btnUsePhoto?.addEventListener('click', processPhoto);
+  btnFallbackUpload?.addEventListener('click', () => fallbackUpload?.click());
+  fallbackUpload?.addEventListener('change', async () => {
+    const file = fallbackUpload.files[0];
+    if (!file) return;
+    setStatus('Uploading fallback photo...');
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const resp = await fetch('{{ url_for("main.upload_fallback_photo") }}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: fd,
+      });
+      const p = await resp.json();
+      if (!resp.ok || !p.success) throw new Error(p.error || 'Upload failed.');
+      processedPreview.src = p.processed_image_url;
+      processedPreview.style.display = 'block';
+      photoData.value = p.processed_image_path;
+      setStatus('Fallback photo uploaded and set.');
+    } catch (err) {
+      setStatus(err.message || 'Upload failed.', true);
+    }
+    fallbackUpload.value = '';
+  });
   cropZoom?.addEventListener('input', renderCropPreview);
   cropX?.addEventListener('input', renderCropPreview);
   cropY?.addEventListener('input', renderCropPreview);
+  cropRotate?.addEventListener('input', renderCropPreview);
   form?.addEventListener('submit', (e) => {
     if (processing) {
       e.preventDefault();
@@ -562,5 +621,65 @@
     if (!formSubmitting) cleanupCurrentCapture(true);
   });
 })();
+</script>
+
+<script type="module">
+import { ImageSegmenter, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
+
+let segmenter = null;
+let initPromise = null;
+
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite";
+const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
+
+async function getSegmenter() {
+  if (segmenter) return segmenter;
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+    segmenter = await ImageSegmenter.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: MODEL_URL },
+      outputCategoryMask: false,
+      outputConfidenceMasks: true,
+      runningMode: "IMAGE",
+    });
+    return segmenter;
+  })();
+  return initPromise;
+}
+
+window.segmentPhoto = async function(imageDataUrl) {
+  const seg = await getSegmenter();
+  const img = new Image();
+  img.src = imageDataUrl;
+  await new Promise(r => { img.onload = r; });
+
+  const result = seg.segment(img);
+  const mask = result.confidenceMasks[0];
+  const w = mask.width;
+  const h = mask.height;
+  const maskData = mask.getAsFloat32Array();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const orig = ctx.getImageData(0, 0, w, h).data;
+
+  const out = ctx.createImageData(w, h);
+  const outData = out.data;
+
+  for (let i = 0; i < maskData.length; i++) {
+    const conf = Math.max(0, Math.min(1, maskData[i]));
+    const o = i * 4;
+    outData[o]     = Math.round(orig[o]     * conf + 255 * (1 - conf));
+    outData[o + 1] = Math.round(orig[o + 1] * conf + 255 * (1 - conf));
+    outData[o + 2] = Math.round(orig[o + 2] * conf + 255 * (1 - conf));
+    outData[o + 3] = 255;
+  }
+  ctx.putImageData(out, 0, 0);
+  return canvas.toDataURL('image/png');
+};
 </script>
 {% endblock %}

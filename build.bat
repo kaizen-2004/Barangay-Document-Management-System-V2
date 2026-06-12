@@ -6,7 +6,9 @@ echo Installing/upgrading PyInstaller...
 python -m pip install --upgrade pyinstaller -q
 
 echo Building executable (this may take a few minutes)...
-pyinstaller --onedir --noconsole --name "BarangaySystem" ^
+pyinstaller --onedir --console --name "BarangaySystem" ^
+  --copy-metadata pymatting ^
+  --copy-metadata rembg ^
   --add-data "frontend\templates;frontend\templates" ^
   --add-data "frontend\static;frontend\static" ^
   --add-data "migrations;migrations" ^
@@ -32,6 +34,8 @@ pyinstaller --onedir --noconsole --name "BarangaySystem" ^
   --hidden-import email_validator ^
   --hidden-import dotenv ^
   --hidden-import numpy ^
+  --hidden-import werkzeug ^
+  --hidden-import unicodedata ^
   run_server.py
 
 echo.

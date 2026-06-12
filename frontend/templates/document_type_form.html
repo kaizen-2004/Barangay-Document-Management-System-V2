@@ -36,6 +36,7 @@
           {{ form.template_file(class="form-control") }}
           {% for error in form.template_file.errors %}<div class="bdm-field-error">{{ error }}</div>{% endfor %}
           <div class="bdm-form-help">Upload a .docx template containing the required placeholders.</div>
+          <div class="text-muted small mt-1">Templates are stored at: <code>data/templates/</code> (next to the .exe)</div>
           {% if document_type and document_type.template_filename %}
             <div class="bdm-form-help mt-1">Current: <strong>{{ document_type.template_filename }}</strong> (v{{ document_type.template_version or 1 }})</div>
           {% endif %}
@@ -193,6 +194,37 @@
 
     // Initial paint
     paintSelected(parseConfig().required);
+
+    // --- Template upload auto-detect placeholders ---
+    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+    const templateFileInput = document.getElementById('template_file');
+    if (templateFileInput) {
+      templateFileInput.addEventListener('change', async () => {
+        const file = templateFileInput.files[0];
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.docx')) return;
+        const fd = new FormData();
+        fd.append('template_file', file);
+        try {
+          const resp = await fetch('{{ url_for("admin.detect_template_placeholders") }}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: fd,
+          });
+          const data = await resp.json();
+          if (!data.success || !data.placeholders) return;
+          const config = parseConfig();
+          const set = new Set(config.required);
+          data.placeholders.forEach(ph => {
+            const btn = document.querySelector(`.ph-btn[data-ph="${ph}"]`);
+            if (btn) set.add(ph);
+          });
+          writeConfig(Array.from(set));
+        } catch (e) {
+          console.warn('Placeholder auto-detect failed:', e);
+        }
+      });
+    }
 
     // --- Field builder ---
     function slugifyFieldName(label) {

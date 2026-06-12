@@ -59,8 +59,8 @@ def create_app(config_class=DevelopmentConfig):
         load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
     frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
-    templates_dir = os.path.join(frontend_dir, "templates")
-    static_dir = os.path.join(frontend_dir, "static")
+    templates_dir = os.environ.get("BARANGAY_TEMPLATES_DIR") or os.path.join(frontend_dir, "templates")
+    static_dir = os.environ.get("BARANGAY_STATIC_DIR") or os.path.join(frontend_dir, "static")
 
     app = Flask(
         __name__,
@@ -131,7 +131,8 @@ def create_app(config_class=DevelopmentConfig):
             endpoint = request.endpoint
             if not endpoint:
                 return "#"
-            args = request.args.to_dict(flat=True)
+            args = dict(request.view_args or {})
+            args.update(request.args.to_dict(flat=True))
             args["page"] = page
             return url_for(endpoint, **args)
 
@@ -148,6 +149,19 @@ def create_app(config_class=DevelopmentConfig):
             "app_version": current_app.config.get("APP_VERSION", "0.1.0"),
             "app_author": current_app.config.get("APP_AUTHOR", "Steve Villa"),
         }
+
+    @app.context_processor
+    def inject_pending_count():
+        from .models import Document
+
+        try:
+            pending_count = Document.query.filter(
+                Document.is_archived.is_(False),
+                Document.status.in_(("draft", "pending")),
+            ).count()
+        except Exception:
+            pending_count = 0
+        return {"sidebar_pending_count": pending_count}
 
     app.jinja_env.filters["local_datetime"] = format_local_datetime
 

@@ -205,17 +205,14 @@ def save_signature_data_url(data_url: str | None, subfolder: str) -> str | None:
     unique_name = f"{unique_stem}.{ext}"
     abs_path = os.path.join(target_dir, unique_name)
 
-    # Crop transparent edges so the signature fills the placeholder snugly
+    # Save the full canvas signature as-is (no cropping)
     from PIL import Image
     from io import BytesIO
     try:
         img = Image.open(BytesIO(raw)).convert("RGBA")
-        bbox = img.getbbox()
-        if bbox:
-            img = img.crop(bbox)
         img.save(abs_path, format="PNG")
     except Exception:
-        current_app.logger.exception("Failed to crop signature; saving raw data.")
+        current_app.logger.exception("Failed to process signature; saving raw data.")
         with open(abs_path, "wb") as f:
             f.write(raw)
 
@@ -291,14 +288,18 @@ def save_camera_capture_for_processing(data_url: str | None, *, level: int = 2, 
     with open(original_abs, "wb") as f:
         f.write(raw)
 
+    pipe_processed = kwargs.get("pipe_processed", False)
     warning = None
-    try:
-        _, warning = process_captured_person_photo(original_abs, processed_abs, level=level)
-    except Exception as exc:
-        current_app.logger.exception("Camera photo processing failed; preserving original image.")
-        warning = "Photo processing failed. Original captured image was preserved."
-        if os.path.isfile(original_abs):
-            shutil.copy2(original_abs, processed_abs)
+    if pipe_processed:
+        shutil.copy2(original_abs, processed_abs)
+    else:
+        try:
+            _, warning = process_captured_person_photo(original_abs, processed_abs, level=level)
+        except Exception as exc:
+            current_app.logger.exception("Camera photo processing failed; preserving original image.")
+            warning = "Photo processing failed. Original captured image was preserved."
+            if os.path.isfile(original_abs):
+                shutil.copy2(original_abs, processed_abs)
 
     processed_rel = f"uploads/processed/residents/{processed_name}"
     return {
@@ -313,6 +314,7 @@ def reprocess_captured_photo(
     original_rel: str,
     processed_rel: str,
     level: int = 2,
+    pipe_processed: bool = False,
 ) -> dict | None:
     """Re-process an existing camera capture, overwriting the previous result.
 
@@ -354,11 +356,14 @@ def reprocess_captured_photo(
         f.write(raw)
 
     warning = None
-    try:
-        _, warning = process_captured_person_photo(original_abs, processed_abs, level=level)
-    except Exception:
-        current_app.logger.exception("Camera photo re-processing failed; preserving previous processed image.")
-        warning = "Re-processing failed. Previous processed image was preserved."
+    if pipe_processed:
+        shutil.copy2(original_abs, processed_abs)
+    else:
+        try:
+            _, warning = process_captured_person_photo(original_abs, processed_abs, level=level)
+        except Exception:
+            current_app.logger.exception("Camera photo re-processing failed; preserving previous processed image.")
+            warning = "Re-processing failed. Previous processed image was preserved."
 
     return {
         "original_path": original_rel,

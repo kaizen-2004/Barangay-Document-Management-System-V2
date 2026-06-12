@@ -23,6 +23,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "waitress>=3.0.0",
     "cryptography>=42.0.0",
+    "tzdata>=2024.1",
 ]
 
 [dependency-groups]

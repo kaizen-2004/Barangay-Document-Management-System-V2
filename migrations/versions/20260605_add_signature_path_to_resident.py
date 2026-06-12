@@ -15,8 +15,22 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("residents", sa.Column("signature_path", sa.String(255), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    residents_cols = [c["name"] for c in inspector.get_columns("residents")]
+    officials_cols = [c["name"] for c in inspector.get_columns("officials")]
+    if "signature_path" not in residents_cols:
+        op.add_column("residents", sa.Column("signature_path", sa.String(255), nullable=True))
+    if "signature_path" not in officials_cols:
+        op.add_column("officials", sa.Column("signature_path", sa.String(255), nullable=True))
 
 
 def downgrade():
-    op.drop_column("residents", "signature_path")
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    residents_cols = [c["name"] for c in inspector.get_columns("residents")]
+    officials_cols = [c["name"] for c in inspector.get_columns("officials")]
+    if "signature_path" in residents_cols:
+        op.drop_column("residents", "signature_path")
+    if "signature_path" in officials_cols:
+        op.drop_column("officials", "signature_path")

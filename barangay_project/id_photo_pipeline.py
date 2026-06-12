@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 _REMBG_SESSION = None
-_REMBG_MODEL_NAME = "birefnet-general"
+_REMBG_MODEL_NAME = "u2net_human_seg"
 _FALLBACK_MODEL_NAME = "isnet-general-use"
 
 PIPELINE_PRESETS = {
@@ -102,6 +102,12 @@ class IDPhotoPipeline:
 
     def process(self, input_path: str) -> np.ndarray:
         image = self._load_image(input_path)
+
+        h, w = image.shape[:2]
+        max_dim = int(os.environ.get("BG_REMOVAL_MAX_DIMENSION", "320"))
+        if max_dim > 0 and max(h, w) > max_dim:
+            scale = max_dim / max(h, w)
+            image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
         metrics = self._assess_quality(image)
 
@@ -263,9 +269,19 @@ class IDPhotoPipeline:
 
     def _segment(self, image: np.ndarray) -> np.ndarray:
         from rembg import remove
+        import os as _os
+
+        h, w = image.shape[:2]
+        max_dim = int(_os.environ.get("BG_REMOVAL_MAX_DIMENSION", "800"))
+        scale = 1.0
+        if max_dim > 0 and max(h, w) > max_dim:
+            scale = max_dim / max(h, w)
+            small = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        else:
+            small = image
 
         session = self._get_rembg_session()
-        rgb_pil = Image.fromarray(image, "RGB")
+        rgb_pil = Image.fromarray(small, "RGB")
         buf = BytesIO()
         rgb_pil.save(buf, format="PNG")
         input_bytes = buf.getvalue()
@@ -285,6 +301,10 @@ class IDPhotoPipeline:
 
         rgba_np = np.array(rgba, dtype=np.uint8)
         alpha = rgba_np[:, :, 3].astype(np.float32) / 255.0
+
+        if scale < 1.0:
+            alpha = cv2.resize(alpha, (w, h), interpolation=cv2.INTER_LINEAR)
+
         return alpha
 
     def _generate_trimap(self, alpha: np.ndarray) -> np.ndarray:
@@ -337,8 +357,8 @@ class IDPhotoPipeline:
         result = alpha.copy()
 
         if np.any(unknown):
-            dist = cv2.distanceTransform((alpha < 0.5).astype(np.uint8), cv2.DIST_L2, 5)
-            dist_fg = cv2.distanceTransform((alpha >= 0.5).astype(np.uint8), cv2.DIST_L2, 5)
+            dist = cv2.distanceTransform((alpha < 0.5).astype(np.uint8), cv2.DIST_L1, 3)
+            dist_fg = cv2.distanceTransform((alpha >= 0.5).astype(np.uint8), cv2.DIST_L1, 3)
             total = dist + dist_fg
             valid = total > 0
             blend = np.where(valid, dist_fg / total, alpha)
@@ -382,21 +402,27 @@ class IDPhotoPipeline:
 
         binary = (alpha >= 0.5).astype(np.uint8)
 
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
-        for label_id in range(1, num_labels):
-            if stats[label_id, cv2.CC_STAT_AREA] < 50:
-                binary[labels == label_id] = 0
+        try:
+            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+            for label_id in range(1, num_labels):
+                if stats[label_id, cv2.CC_STAT_AREA] < 50:
+                    binary[labels == label_id] = 0
 
-        inv_binary = 1 - binary
-        num_labels_bg, labels_bg, stats_bg, _ = cv2.connectedComponentsWithStats(inv_binary, connectivity=8)
-        for label_id in range(1, num_labels_bg):
-            if stats_bg[label_id, cv2.CC_STAT_AREA] < 50:
-                binary[labels_bg == label_id] = 1
+            inv_binary = 1 - binary
+            num_labels_bg, labels_bg, stats_bg, _ = cv2.connectedComponentsWithStats(inv_binary, connectivity=8)
+            for label_id in range(1, num_labels_bg):
+                if stats_bg[label_id, cv2.CC_STAT_AREA] < 50:
+                    binary[labels_bg == label_id] = 1
+        except Exception:
+            pass
 
         transition = (alpha > 0.1) & (alpha < 0.9)
         if np.any(transition):
-            blurred = cv2.GaussianBlur(alpha, (3, 3), sigmaX=0.5)
-            result[transition] = blurred[transition]
+            try:
+                blurred = cv2.GaussianBlur(alpha, (3, 3), sigmaX=0.5)
+                result[transition] = blurred[transition]
+            except Exception:
+                pass
 
         return np.clip(result, 0.0, 1.0)
 
@@ -407,8 +433,11 @@ class IDPhotoPipeline:
         if self.decontaminate:
             transition = (alpha > 0.05) & (alpha < 0.95)
             if np.any(transition):
-                eroded_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-                alpha_eroded = cv2.erode(alpha_u8, eroded_kernel, iterations=1).astype(np.float32) / 255.0
+                try:
+                    eroded_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+                    alpha_eroded = cv2.erode(alpha_u8, eroded_kernel, iterations=1).astype(np.float32) / 255.0
+                except Exception:
+                    alpha_eroded = alpha
 
                 foreground = alpha_eroded > 0.1
                 if np.any(foreground):

@@ -30,7 +30,6 @@ from jinja2.exceptions import TemplateSyntaxError
 from PIL import Image
 
 from .extensions import db
-from .image_processing import composite_transparent_on_white, remove_background_to_white
 from .formatting import apply_document_formatting, format_full_address, format_resident_name
 from .models import User
 
@@ -280,28 +279,46 @@ def _build_knl_document_id(document, issue_dt: date) -> str:
 
 def _build_qr_image(document, issue_dt: date, knl_document_id: str) -> str:
     import qrcode
+    from flask import url_for, request, current_app
 
     document_id = int(document.id)
     target = document_output_dir() / f"qr_{document_id}.png"
-    resident = document.resident
-    resident_name = " ".join(p for p in [resident.first_name, resident.middle_name, resident.last_name] if p) if resident else "Unknown resident"
-    message = (
-        "This is to certify that this barangay document is authentic. "
-        f"Document ID: {knl_document_id}. "
-        f"Resident: {resident_name}. "
-        f"Document Type: {document.document_type.name if document.document_type else 'Document'}. "
-        f"Issue Date: {issue_dt.strftime('%B %d, %Y')}."
-    )
+
+    public_url = ""
+    try:
+        from .settings import get_setting
+        public_url = get_setting("public_url", "")
+    except Exception:
+        pass
+    if not public_url:
+        public_url = current_app.config.get("PUBLIC_URL", "")
+
+    if public_url:
+        verify_url = f"{public_url.rstrip('/')}/verify/{document_id}"
+    else:
+        try:
+            verify_url = url_for("main.verify_document", document_id=document_id, _external=True)
+        except RuntimeError:
+            host = request.host if request else "localhost:5000"
+            scheme = "https" if request and request.is_secure else "http"
+            verify_url = f"{scheme}://{host}/verify/{document_id}"
+
     qr = qrcode.QRCode(
         version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=10,
-        border=0,
+        box_size=7,
+        border=4,
     )
-    qr.add_data(message)
+    qr.add_data(verify_url)
     qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-    img.save(target)
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+
+    from PIL import Image as PILImage
+    w, h = qr_img.size
+    padding = max(w, h) // 10
+    padded = PILImage.new("RGB", (w + padding * 2, h + padding * 2), "white")
+    padded.paste(qr_img, (padding, padding))
+    padded.save(target)
     return str(target)
 
 
@@ -329,32 +346,70 @@ def _field_config_names(document_type) -> set[str]:
 
 
 def _build_resident_photo_for_document(photo_abs: str, document_id: int) -> str:
-    from PIL import Image
+    from PIL import Image, ImageOps
 
     target = document_output_dir() / f"resident_photo_doc_{document_id}.png"
-    white_bg_source = document_output_dir() / f"resident_photo_white_{document_id}.png"
-    try:
-        if current_app.config.get("ENABLE_ID_PHOTO_PIPELINE", True):
-            composite_transparent_on_white(photo_abs, str(white_bg_source))
-        else:
-            remove_background_to_white(photo_abs, str(white_bg_source))
-        source_path = white_bg_source
-    except Exception:
-        current_app.logger.exception("Resident photo background processing failed; using existing image.")
-        source_path = Path(photo_abs)
 
-    img = Image.open(source_path)
-    if img.mode not in ("RGB", "RGBA"):
-        img = img.convert("RGB")
+    img = Image.open(photo_abs)
+    img = ImageOps.exif_transpose(img)
 
-    img.save(target, dpi=(300, 300))
+    target_size = 600
+
+    if img.width == target_size and img.height == target_size and img.mode == "RGB":
+        img.save(str(target), dpi=(300, 300))
+        return str(target)
+
+    if img.mode == "RGBA":
+        white_bg = Image.new("RGB", (target_size, target_size), (255, 255, 255))
+        img_resized = img.resize((target_size, target_size), Image.Resampling.LANCZOS)
+        white_bg.paste(img_resized, (0, 0), img_resized)
+        white_bg.save(str(target), dpi=(300, 300))
+        return str(target)
+
+    img = img.convert("RGB")
+    if img.width == target_size and img.height == target_size:
+        img.save(str(target), dpi=(300, 300))
+        return str(target)
+
+    img_ratio = img.width / img.height
+    if img_ratio > 1:
+        new_w = target_size
+        new_h = int(target_size / img_ratio)
+    else:
+        new_h = target_size
+        new_w = int(target_size * img_ratio)
+
+    img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    white_bg = Image.new("RGB", (target_size, target_size), (255, 255, 255))
+    offset_x = (target_size - new_w) // 2
+    offset_y = (target_size - new_h) // 2
+    white_bg.paste(img, (offset_x, offset_y))
+    white_bg.save(str(target), dpi=(300, 300))
     return str(target)
 
 
 def _build_resident_signature_for_document(tpl: DocxTemplate, resident) -> str | InlineImage:
     sig_abs = _relative_static_to_abs(getattr(resident, "signature_path", None))
     if sig_abs and Path(sig_abs).exists():
-        return InlineImage(tpl, sig_abs, width=Mm(35))
+        sig_img = Image.open(sig_abs).convert("RGBA")
+        target_w, target_h = 700, 120
+        sig_ratio = sig_img.width / sig_img.height
+        target_ratio = target_w / target_h
+        if sig_ratio > target_ratio:
+            new_w = target_w
+            new_h = int(target_w / sig_ratio)
+        else:
+            new_h = target_h
+            new_w = int(target_h * sig_ratio)
+        sig_img = sig_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        canvas = Image.new("RGBA", (target_w, target_h), (255, 255, 255, 0))
+        offset_x = (target_w - new_w) // 2
+        offset_y = (target_h - new_h) // 2
+        canvas.paste(sig_img, (offset_x, offset_y), sig_img)
+        norm_path = document_output_dir() / f"sig_norm_{Path(sig_abs).stem}.png"
+        canvas.save(str(norm_path), dpi=(300, 300))
+        return InlineImage(tpl, str(norm_path))
     return ""
 
 
@@ -369,10 +424,19 @@ def _build_context(document, tpl: DocxTemplate) -> dict:
     knl_document_id = _build_knl_document_id(document, issue_dt)
     qr_abs = _build_qr_image(document, issue_dt, knl_document_id)
 
-    if not photo_abs:
+    needs_photo = bool(document.document_type and document.document_type.requires_photo)
+
+    if needs_photo and not photo_abs:
         raise DocumentGenerationError("Resident photo is missing. Capture photo before issuing.")
 
-    resident_photo_for_docx = _build_resident_photo_for_document(photo_abs, document.id)
+    if photo_abs:
+        resident_photo_for_docx = _build_resident_photo_for_document(photo_abs, document.id)
+    else:
+        blank = Image.new("RGB", (200, 200), (255, 255, 255))
+        blank_path = document_output_dir() / f"blank_photo_{document.id}.png"
+        blank.save(str(blank_path), dpi=(300, 300))
+        resident_photo_for_docx = str(blank_path)
+
     birth_date = resident.birth_date.strftime("%B %d, %Y") if getattr(resident, "birth_date", None) else ""
     author = _resolve_author_name(document)
     year_on_barangay = _compute_year_on_barangay(document, issue_dt)
@@ -404,7 +468,7 @@ def _build_context(document, tpl: DocxTemplate) -> dict:
         "resident_photo": InlineImage(tpl, resident_photo_for_docx),
         "captain_signature": "",
         "resident_signature": _build_resident_signature_for_document(tpl, resident),
-        "qr_code": InlineImage(tpl, qr_abs, width=Inches(1), height=Inches(1)),
+        "qr_code": InlineImage(tpl, qr_abs, width=Inches(0.85), height=Inches(0.85)),
     }
     context.update(_custom_field_values(document))
     return apply_document_formatting(context)
@@ -418,19 +482,26 @@ def _convert_docx_to_pdf(docx_path: Path) -> Path | None:
     cmd = [
         libreoffice_bin,
         "--headless",
+        "--norestore",
         "--convert-to",
         "pdf",
         "--outdir",
         str(out_dir),
         str(docx_path),
     ]
+    env = os.environ.copy()
+    env["PRINTER"] = ""
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=timeout, env=env)
     except FileNotFoundError:
         current_app.logger.warning("LibreOffice not found — PDF conversion skipped.")
         return None
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        current_app.logger.exception("LibreOffice PDF conversion failed — skipping PDF.")
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or b"").decode(errors="ignore")
+        current_app.logger.warning("LibreOffice PDF conversion failed: %s", stderr.strip())
+        return None
+    except subprocess.TimeoutExpired:
+        current_app.logger.warning("LibreOffice PDF conversion timed out — skipping PDF.")
         return None
 
     pdf_path = out_dir / f"{docx_path.stem}.pdf"
@@ -571,6 +642,8 @@ def render_document_files(document) -> tuple[str, str]:
         raise DocumentGenerationError("Configured DOCX template file is missing on disk.")
 
     required_placeholders = set(REQUIRED_PLACEHOLDERS)
+    if not getattr(dt, "requires_photo", True):
+        required_placeholders.discard("resident_photo")
     if getattr(dt, "placeholder_config", None):
         try:
             parsed = json.loads(dt.placeholder_config)
@@ -634,6 +707,8 @@ def preview_document_type_template(doc_type) -> tuple[bytes, str]:
         raise DocumentGenerationError("Template file is missing on disk.")
 
     required_placeholders = set(REQUIRED_PLACEHOLDERS)
+    if not getattr(doc_type, "requires_photo", True):
+        required_placeholders.discard("resident_photo")
     if getattr(doc_type, "placeholder_config", None):
         try:
             parsed = json.loads(doc_type.placeholder_config)
@@ -685,8 +760,8 @@ def preview_document_type_template(doc_type) -> tuple[bytes, str]:
     with tempfile.TemporaryDirectory() as tmpdir:
         placeholder_img = _make_placeholder_image(tmpdir, "PHOTO", (240, 280))
         qr_img = _make_placeholder_image(tmpdir, "QR", (200, 200))
-        dummy_context["resident_photo"] = InlineImage(tpl, placeholder_img, width=Mm(25), height=Mm(30))
-        dummy_context["qr_code"] = InlineImage(tpl, qr_img, width=Inches(1), height=Inches(1))
+        dummy_context["resident_photo"] = InlineImage(tpl, placeholder_img)
+        dummy_context["qr_code"] = InlineImage(tpl, qr_img, width=Inches(0.85), height=Inches(0.85))
 
         # Custom fields from field_config
         if getattr(doc_type, "field_config", None):

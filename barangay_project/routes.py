@@ -11,6 +11,7 @@ For admin-only features (users, document types, audit logs), see `admin.py`.
 from __future__ import annotations
 
 import os
+import uuid
 import csv
 import io
 import json
@@ -36,6 +37,14 @@ from .time_utils import utcnow
 DOCUMENT_STATUSES = ("draft", "pending", "approved", "issued")
 DRAFT_LIKE_STATUSES = ("draft", "pending", "approved")
 KNL_ID_PATTERN = re.compile(r"^KNL-\\d{4}-\\d{5}$", re.IGNORECASE)
+
+
+def _add_months(d, months):
+    month = d.month - 1 + months
+    year = d.year + month // 12
+    month = month % 12 + 1
+    day = min(d.day, monthrange(year, month)[1])
+    return dt_date(year, month, day)
 RESIDENT_SEARCH_COLUMNS = (
     Resident.first_name,
     Resident.last_name,
@@ -214,13 +223,13 @@ def capture_process_photo():
     payload = request.get_json(silent=True) or {}
     image_data = payload.get("image_data")
     level = _clamp_removal_level(payload.get("removal_level", 2))
+    pipe_processed = payload.get("pipe_processed", False)
 
     existing_original = payload.get("original_path")
     existing_processed = payload.get("processed_path")
 
     if existing_original and existing_processed:
-        # Re-process: overwrite existing temp files in place (no duplicates)
-        result = reprocess_captured_photo(image_data, existing_original, existing_processed, level=level)
+        result = reprocess_captured_photo(image_data, existing_original, existing_processed, level=level, pipe_processed=pipe_processed)
         if not result:
             return jsonify({"success": False, "error": "Invalid re-process request."}), 400
         resident_photo_saved = False
@@ -240,7 +249,7 @@ def capture_process_photo():
             "warning": result.get("warning"),
         })
 
-    result = save_camera_capture_for_processing(image_data, level=level)
+    result = save_camera_capture_for_processing(image_data, level=level, pipe_processed=pipe_processed)
     if not result:
         return jsonify({"success": False, "error": "Invalid captured image."}), 400
 
@@ -277,6 +286,41 @@ def capture_process_photo():
     return jsonify(response)
 
 
+@main_bp.route("/api/photos/capture-cleanup", methods=["POST"])
+
+@main_bp.route("/api/photos/upload-fallback", methods=["POST"])
+@login_required
+@roles_required("admin", "clerk")
+def upload_fallback_photo():
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "No file uploaded."}), 400
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"success": False, "error": "Empty filename."}), 400
+
+    from io import BytesIO
+    from PIL import Image
+    try:
+        img = Image.open(file.stream).convert("RGB")
+    except Exception:
+        return jsonify({"success": False, "error": "Invalid image file."}), 400
+
+    processed_dir = os.path.join(
+        current_app.config.get("UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")),
+        "processed", "residents",
+    )
+    os.makedirs(processed_dir, exist_ok=True)
+
+    name = f"{uuid.uuid4().hex}.png"
+    abs_path = os.path.join(processed_dir, name)
+    img.save(abs_path, format="PNG")
+
+    rel_path = f"uploads/processed/residents/{name}"
+    return jsonify({
+        "success": True,
+        "processed_image_path": rel_path,
+        "processed_image_url": url_for("static", filename=rel_path) + f"?v={time.time_ns()}",
+    })
 @main_bp.route("/api/photos/capture-cleanup", methods=["POST"])
 @login_required
 @roles_required("admin", "clerk")
@@ -320,6 +364,48 @@ def api_resident_field_values(resident_id: int):
     if not resident or resident.is_archived:
         return jsonify({"success": False, "error": "Resident not found."}), 404
     return jsonify({"success": True, "values": _resident_profile_field_values(resident)})
+
+
+@main_bp.route("/verify/<int:document_id>")
+def verify_document(document_id: int):
+    """Public page to verify document authenticity via QR code scan."""
+    from .extensions import db as _db
+    document = _db.session.get(Document, document_id)
+    if not document:
+        return render_template("verify.html", valid=False, error="Document not found.", barangay_name=current_app.config.get("BARANGAY_NAME", "Barangay")), 404
+    if document.status != "issued":
+        return render_template("verify.html", valid=False, error="This document has not been issued.", barangay_name=current_app.config.get("BARANGAY_NAME", "Barangay")), 404
+    if document.is_archived:
+        return render_template("verify.html", valid=False, error="This document has been archived.", barangay_name=current_app.config.get("BARANGAY_NAME", "Barangay")), 404
+
+    resident = document.resident
+    doc_type = document.document_type
+    issue_date = document.issue_date
+    if hasattr(issue_date, "date"):
+        issue_date = issue_date.date()
+
+    doc_num = getattr(document, "id", None)
+    knl_id = f"KNL-{issue_date.year}-{int(doc_num):05d}" if issue_date and doc_num else "N/A"
+
+    resident_name = " ".join(
+        p for p in [resident.first_name, resident.middle_name, resident.last_name] if p
+    ).upper() if resident else "Unknown"
+
+    expiry_date = None
+    if doc_type and doc_type.validity_months and issue_date:
+        expiry_date = _add_months(issue_date, doc_type.validity_months) if hasattr(issue_date, "month") else None
+
+    return render_template(
+        "verify.html",
+        valid=True,
+        document_id=document.id,
+        knl_id=knl_id,
+        resident_name=resident_name,
+        doc_type_name=doc_type.name if doc_type else "Document",
+        issue_date=issue_date,
+        expiry_date=expiry_date,
+        barangay_name=current_app.config.get("BARANGAY_NAME", "Barangay"),
+    )
 
 
 @main_bp.route("/")
@@ -407,18 +493,33 @@ def index():
     resident_month_labels = [m for m, _ in resident_month_rows][-6:]
     resident_month_values = [int(c) for _, c in resident_month_rows][-6:]
 
+    pending_document_count = Document.query.filter(
+        Document.is_archived.is_(False),
+        Document.status.in_(("pending", "approved")),
+    ).count()
+
     # Document status breakdown
-    status_labels = ["Issued", "Draft", "Archived"]
-    status_values = [document_count, draft_document_count, archived_document_count]
+    status_labels = ["Issued", "Draft", "Pending/Approved", "Archived"]
+    status_values = [document_count, draft_document_count, pending_document_count, archived_document_count]
+
+    # Residents by age group
+    age_groups = {"0-17": 0, "18-30": 0, "31-45": 0, "46-60": 0, "61+": 0}
+    for r in Resident.query.filter(Resident.is_archived.is_(False), Resident.birth_date.isnot(None)).all():
+        age = (today - r.birth_date).days // 365
+        if age < 18:
+            age_groups["0-17"] += 1
+        elif age <= 30:
+            age_groups["18-30"] += 1
+        elif age <= 45:
+            age_groups["31-45"] += 1
+        elif age <= 60:
+            age_groups["46-60"] += 1
+        else:
+            age_groups["61+"] += 1
+    age_labels = list(age_groups.keys())
+    age_values = list(age_groups.values())
 
     # Expiring documents (within 30 days)
-    def _add_months(d, months):
-        month = d.month - 1 + months
-        year = d.year + month // 12
-        month = month % 12 + 1
-        day = min(d.day, monthrange(year, month)[1])
-        return dt_date(year, month, day)
-
     expiring_cutoff = today + timedelta(days=30)
     expiring_docs = []
     all_issued = Document.query.filter(
@@ -478,6 +579,39 @@ def index():
         # If the audit table isn't available yet, keep the dashboard usable.
         recent_logs = []
 
+    # Recent documents (latest 5 issued or drafted)
+    recent_documents = (
+        Document.query
+        .filter(Document.is_archived.is_(False))
+        .order_by(Document.updated_at.desc().nullslast(), Document.id.desc())
+        .limit(5)
+        .all()
+    )
+
+    # Month-over-month trends
+    prev_month_start = month_start - timedelta(days=30)
+    prev_month_end = month_start
+    prev_residents = Resident.query.filter(
+        Resident.is_archived.is_(False),
+        Resident.created_at >= prev_month_start,
+        Resident.created_at < prev_month_end,
+    ).count()
+    cur_residents = Resident.query.filter(
+        Resident.is_archived.is_(False),
+        Resident.created_at >= month_start,
+        Resident.created_at < next_month_start,
+    ).count()
+    resident_trend_pct = round(((cur_residents - prev_residents) / max(prev_residents, 1)) * 100)
+
+    prev_documents = Document.query.filter(
+        Document.is_archived.is_(False),
+        Document.status == "issued",
+        Document.issue_date >= prev_month_start,
+        Document.issue_date < prev_month_end,
+    ).count()
+    cur_documents = documents_this_month
+    document_trend_pct = round(((cur_documents - prev_documents) / max(prev_documents, 1)) * 100)
+
     return render_template(
         "index.html",
         resident_count=resident_count,
@@ -498,10 +632,16 @@ def index():
         resident_month_values=resident_month_values,
         status_labels=status_labels,
         status_values=status_values,
+        age_labels=age_labels,
+        age_values=age_values,
+        pending_document_count=pending_document_count,
         expiring_docs=expiring_docs,
         expiring_count=expiring_count,
         upcoming_birthdays=upcoming_birthdays,
         recent_logs=recent_logs,
+        recent_documents=recent_documents,
+        resident_trend_pct=resident_trend_pct,
+        document_trend_pct=document_trend_pct,
     )
 
 
@@ -1601,6 +1741,7 @@ def download_document_pdf(document_id: int):
 
     is_pdf = abs_path.suffix.lower() == ".pdf"
     mimetype = "application/pdf" if is_pdf else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    view_inline = request.args.get("view") == "1"
 
     log_action(
         "Downloaded document PDF" if is_pdf else "Downloaded document DOCX",
@@ -1611,6 +1752,17 @@ def download_document_pdf(document_id: int):
             "document_type_id": doc.document_type_id,
         },
     )
+
+    if view_inline:
+        if not is_pdf:
+            flash("This document only has a DOCX file (LibreOffice may not be installed for PDF conversion).", "warning")
+            return redirect(url_for("main.list_documents"))
+        from flask import Response
+        return Response(
+            abs_path.read_bytes(),
+            mimetype=mimetype,
+            headers={"Content-Disposition": f"inline; filename={abs_path.name}"},
+        )
 
     return send_file(str(abs_path), mimetype=mimetype, as_attachment=True)
 
@@ -1712,19 +1864,19 @@ def edit_document(document_id: int):
         return redirect(url_for("main.list_documents"))
     form = DocumentForm(obj=document)
 
-    _ctx = dict(
-        form=form, title="Edit Document", document=document, doc_history=doc_history,
-        document_type_field_configs=field_configs,
-    )
-
-    # Document history (revision trail)
+    doc_history = []
     try:
         doc_history = TransactionLog.query.filter(
             TransactionLog.entity_type == "document",
             TransactionLog.entity_id == document.id,
         ).order_by(TransactionLog.timestamp.desc()).limit(20).all()
     except Exception:
-        doc_history = []
+        pass
+
+    _ctx = dict(
+        form=form, title="Edit Document", document=document, doc_history=doc_history,
+        document_type_field_configs=field_configs,
+    )
 
     # Populate selects
     form.resident_id.choices = [
@@ -1866,7 +2018,9 @@ def finalize_document_issue(document_id: int):
         meta={"status": document.status},
     )
     flash("Document issued successfully!", "success")
-    return redirect(url_for("main.list_documents"))
+    if not pdf_rel_path:
+        flash("PDF generation skipped (LibreOffice not found). Install LibreOffice to enable Print and inline preview.", "warning")
+    return redirect(url_for("main.list_documents", issued=document.id))
 
 
 @main_bp.route("/documents/<int:document_id>/request-approval", methods=["POST"])
@@ -2177,29 +2331,25 @@ def export_residents():
     q = (request.args.get("q") or "").strip()
     query = Resident.query.filter(Resident.is_archived.is_(False))
     if q:
-        like = f"%{q}%"
-        query = query.filter(
-            db.or_(
-                Resident.first_name.ilike(like),
-                Resident.last_name.ilike(like),
-                Resident.knl_id.ilike(like),
-            )
-        )
+        query = query.filter(_multi_search_filter(q, RESIDENT_SEARCH_COLUMNS))
     residents = query.order_by(Resident.last_name, Resident.first_name).all()
     rows = []
     for r in residents:
+        age = None
+        if r.birth_date:
+            age = (dt_date.today() - r.birth_date).days // 365
         rows.append({
-            "KNL ID": r.knl_id,
+            "Barangay ID": r.barangay_id or "",
             "Last Name": r.last_name,
             "First Name": r.first_name,
             "Middle Name": r.middle_name or "",
-            "Suffix": r.suffix or "",
             "Gender": r.gender or "",
             "Birth Date": r.birth_date.strftime("%Y-%m-%d") if r.birth_date else "",
-            "Age": r.age if r.age is not None else "",
+            "Age": age if age is not None else "",
             "Marital Status": r.marital_status or "",
-            "Mobile": r.mobile or "",
-            "Email": r.email or "",
+            "Contact Number": r.contact_number or "",
+            "Occupation": r.occupation or "",
+            "Street": r.street.name if r.street else "",
             "Address": r.address or "",
         })
     filename = f"residents_export_{utcnow().strftime('%Y%m%d_%H%M%S')}"
@@ -2223,11 +2373,8 @@ def export_residents():
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
-        return Response(
-            output.getvalue(),
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={filename}.xlsx"},
-        )
+        log_action("Exported residents (XLSX)", entity_type="report", meta={"rows": len(rows)})
+        return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"{filename}.xlsx")
     if not rows:
         flash("No residents to export.", "info")
         return redirect(request.referrer or url_for("main.list_residents"))
@@ -2235,8 +2382,5 @@ def export_residents():
     writer = csv.DictWriter(output, fieldnames=rows[0].keys())
     writer.writeheader()
     writer.writerows(rows)
-    return Response(
-        output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}.csv"},
-    )
+    log_action("Exported residents (CSV)", entity_type="report", meta={"rows": len(rows)})
+    return send_file(io.BytesIO(output.getvalue().encode("utf-8")), mimetype="text/csv", as_attachment=True, download_name=f"{filename}.csv")

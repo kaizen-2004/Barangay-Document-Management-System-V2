@@ -11,7 +11,22 @@ MySQL or PostgreSQL instead, set the `DATABASE_URL` environment variable
 before starting the application.
 """
 import os
+import shutil
+import sys
 from datetime import timedelta
+
+
+def _find_libreoffice() -> str:
+    if shutil.which("soffice"):
+        return "soffice"
+    if shutil.which("soffice.exe"):
+        return "soffice.exe"
+    if sys.platform == "win32":
+        for base in [r"C:\Program Files\LibreOffice", r"C:\Program Files (x86)\LibreOffice"]:
+            path = os.path.join(base, "program", "soffice.exe")
+            if os.path.isfile(path):
+                return path
+    return "soffice"
 
 
 class Config:
@@ -49,14 +64,17 @@ class Config:
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 5 * 1024 * 1024))  # 5MB
     ENABLE_CAMERA_CAPTURE = os.environ.get("ENABLE_CAMERA_CAPTURE", "True") == "True"
     ENABLE_BACKGROUND_REMOVAL = os.environ.get("ENABLE_BACKGROUND_REMOVAL", "True") == "True"
-    ENABLE_ID_PHOTO_PIPELINE = os.environ.get("ENABLE_ID_PHOTO_PIPELINE", "True") == "True"
+    ENABLE_ID_PHOTO_PIPELINE = os.environ.get("ENABLE_ID_PHOTO_PIPELINE", "False") == "True"
     ID_PHOTO_NORMALIZE = os.environ.get("ID_PHOTO_NORMALIZE", "True") == "True"
     ID_PHOTO_REFINE_ALPHA = os.environ.get("ID_PHOTO_REFINE_ALPHA", "True") == "True"
-    ID_PHOTO_PRESET = os.environ.get("ID_PHOTO_PRESET", "id_photo")
-    ID_PHOTO_MODEL = os.environ.get("ID_PHOTO_MODEL", "birefnet-general")
-    ID_PHOTO_SKIP_NORMALIZE = os.environ.get("ID_PHOTO_SKIP_NORMALIZE", "False") == "True"
+    ID_PHOTO_PRESET = os.environ.get("ID_PHOTO_PRESET", "fast")
+    ID_PHOTO_MODEL = os.environ.get("ID_PHOTO_MODEL", "u2net_human_seg")
+    ID_PHOTO_SKIP_NORMALIZE = os.environ.get("ID_PHOTO_SKIP_NORMALIZE", "True") == "True"
     PROCESSED_PHOTO_WIDTH = int(os.environ.get("PROCESSED_PHOTO_WIDTH", 600))
     PROCESSED_PHOTO_HEIGHT = int(os.environ.get("PROCESSED_PHOTO_HEIGHT", 600))
+
+    # Background removal: downscale images larger than this for speed (0 = no limit)
+    BG_REMOVAL_MAX_DIMENSION = int(os.environ.get("BG_REMOVAL_MAX_DIMENSION", "280"))
 
     # CSRF: keep tokens valid (avoids "token expired" during long admin sessions)
     WTF_CSRF_TIME_LIMIT = None
@@ -72,7 +90,7 @@ class Config:
     BACKUP_RETENTION_DAYS = int(os.environ.get("BACKUP_RETENTION_DAYS", 7))
     MYSQLDUMP_BIN = os.environ.get("MYSQLDUMP_BIN", "mysqldump")
     MYSQL_BIN = os.environ.get("MYSQL_BIN", "mysql")
-    LIBREOFFICE_BIN = os.environ.get("LIBREOFFICE_BIN", "soffice")
+    LIBREOFFICE_BIN = os.environ.get("LIBREOFFICE_BIN") or _find_libreoffice()
     LIBREOFFICE_TIMEOUT_SECONDS = int(os.environ.get("LIBREOFFICE_TIMEOUT_SECONDS", 90))
     ERROR_REPORT_EMAIL = os.environ.get("ERROR_REPORT_EMAIL", "")
 
@@ -113,6 +131,10 @@ class Config:
     APP_VERSION = os.environ.get("APP_VERSION", "0.1.0")
     APP_AUTHOR = os.environ.get("APP_AUTHOR", "Steve Villa")
 
+    # Public URL for QR codes — set this to your Cloudflare Tunnel URL
+    # so QR codes work from any network (e.g., https://your-name.trycloudflare.com)
+    PUBLIC_URL = os.environ.get("PUBLIC_URL", "")
+
     # Login rate limiting (per IP and per username)
     LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("LOGIN_RATE_LIMIT_WINDOW_SECONDS", 600))
     LOGIN_RATE_LIMIT_MAX = int(os.environ.get("LOGIN_RATE_LIMIT_MAX", 5))
@@ -139,7 +161,7 @@ class Config:
             "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data: blob:; "
-            "font-src 'self' https://cdn.jsdelivr.net; "
+            "font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
             "connect-src 'self'; "
             "media-src 'self' blob:; "
             "object-src 'none'; "
