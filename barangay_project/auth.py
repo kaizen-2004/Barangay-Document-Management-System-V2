@@ -1,22 +1,26 @@
 """
 Authentication blueprint for the Barangay Document Management System.
 
-This module defines routes for user login and logout.  It integrates
-with Flask-Login to manage user sessions.  Additional routes for
-registration and password reset could be added here in the future.
+This module defines routes for user login, logout, and password reset.
 """
+import random
+import string
+
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 
 from .extensions import db
-from .models import User, LoginAttempt
+from .models import User, LoginAttempt, PasswordResetCode
 from .forms import (
     LoginForm,
     PasswordChangeForm,
+    ForgotPasswordForm,
+    ResetPasswordForm,
 )
 from .helpers import log_action, get_client_ip
+from .email_service import send_email
 from .time_utils import utcnow
-from datetime import timedelta
+from datetime import timedelta, timezone
 import time
 
 auth_bp = Blueprint("auth", __name__)
@@ -158,3 +162,101 @@ def profile():
             flash("Password updated.", "success")
             return redirect(url_for("auth.profile"))
     return render_template("profile.html", form=form)
+
+
+def _generate_reset_code() -> str:
+    return "".join(random.choices(string.digits, k=6))
+
+
+def _send_reset_code(user: User) -> bool:
+    code = _generate_reset_code()
+    expiry_minutes = int(current_app.config.get("PASSWORD_RESET_CODE_EXPIRY_MINUTES", 15))
+    expires_at = utcnow() + timedelta(minutes=expiry_minutes)
+
+    reset = PasswordResetCode(
+        user_id=user.id,
+        code=code,
+        expires_at=expires_at,
+    )
+    db.session.add(reset)
+    db.session.commit()
+
+    html = f"""
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color: #a32020;">Password Reset Code</h2>
+        <p>Your 6-digit verification code is:</p>
+        <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px;
+                    text-align: center; padding: 20px; background: #f8f4f3;
+                    border-radius: 8px; color: #1f1616;">{code}</div>
+        <p style="color: #7b6f6f; font-size: 14px;">
+            This code expires in {expiry_minutes} minutes.<br>
+            If you didn't request this, ignore this email.
+        </p>
+    </div>
+    """
+    return send_email(user.email, "Password Reset Code", html)
+
+
+@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for("main.index"))
+
+    form = ForgotPasswordForm()
+    if form.validate_on_submit():
+        username = (form.username.data or "").strip()
+        user = User.query.filter_by(username=username).first()
+
+        if user and user.email:
+            _send_reset_code(user)
+            # Mask email for display: j***@gmail.com
+            email = user.email
+            masked = email[0] + "***@" + email.split("@")[1] if "@" in email else "***"
+            flash(f"Reset code sent to {masked}", "success")
+        else:
+            # Always show same message to prevent username enumeration
+            flash("If an account with that username exists, a reset code has been sent.", "info")
+
+        return redirect(url_for("auth.reset_password"))
+
+    return render_template("forgot_password.html", form=form)
+
+
+@auth_bp.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    if current_user.is_authenticated:
+        return redirect(url_for("main.index"))
+
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        email = (form.email.data or "").strip().lower()
+        code = (form.code.data or "").strip()
+        new_password = form.new_password.data
+
+        user = User.query.filter(db.func.lower(User.email) == email).first()
+        if not user:
+            flash("Invalid email or code.", "danger")
+            return render_template("reset_password.html", form=form)
+
+        expiry_minutes = int(current_app.config.get("PASSWORD_RESET_CODE_EXPIRY_MINUTES", 15))
+        reset = PasswordResetCode.query.filter(
+            PasswordResetCode.user_id == user.id,
+            PasswordResetCode.code == code,
+            PasswordResetCode.used.is_(False),
+            PasswordResetCode.expires_at >= utcnow(),
+        ).order_by(PasswordResetCode.id.desc()).first()
+
+        if not reset:
+            flash("Invalid or expired code. Please request a new one.", "danger")
+            return render_template("reset_password.html", form=form)
+
+        # Mark code as used and set new password
+        reset.used = True
+        user.set_password(new_password)
+        db.session.commit()
+
+        log_action("Password reset via email", entity_type="user", entity_id=user.id)
+        flash("Your password has been reset. You can now log in.", "success")
+        return redirect(url_for("auth.login"))
+
+    return render_template("reset_password.html", form=form)

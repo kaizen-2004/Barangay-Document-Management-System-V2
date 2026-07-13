@@ -356,6 +356,31 @@ def process_signature():
     })
 
 
+@main_bp.route("/api/signatures/process-photo", methods=["POST"])
+@login_required
+@roles_required("admin", "clerk")
+def process_signature_photo():
+    if not current_app.config.get("ENABLE_CAMERA_CAPTURE", True):
+        return jsonify({"success": False, "error": "Camera capture is disabled."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    image_data = payload.get("image_data")
+    if not image_data:
+        return jsonify({"success": False, "error": "No image data provided."}), 400
+
+    from .helpers import process_captured_signature
+    ink_sensitivity = payload.get("ink_sensitivity", 15)
+    rel_path = process_captured_signature(image_data, ink_sensitivity=ink_sensitivity)
+    if not rel_path:
+        return jsonify({"success": False, "error": "Failed to process signature image."}), 400
+
+    return jsonify({
+        "success": True,
+        "signature_path": rel_path,
+        "signature_url": url_for("static", filename=rel_path) + f"?v={time.time_ns()}",
+    })
+
+
 @main_bp.route("/api/residents/<int:resident_id>/field-values")
 @login_required
 @roles_required("admin", "clerk")

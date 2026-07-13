@@ -179,6 +179,7 @@ class User(UserMixin, db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), nullable=False, unique=True)
+    email = db.Column(db.String(255), nullable=True, unique=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False, default="clerk")
     created_at = db.Column(db.DateTime, default=utcnow)
@@ -204,6 +205,18 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f"<User {self.username}>"
+
+
+class PasswordResetCode(db.Model):
+    """Stores temporary 6-digit codes for password reset via email."""
+
+    __tablename__ = "password_reset_codes"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    code = db.Column(db.String(6), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
 
 class TransactionLog(db.Model):

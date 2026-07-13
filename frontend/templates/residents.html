@@ -20,14 +20,14 @@
 </div>
 
 {% if not archived_view and residents %}
-  <div class="d-flex flex-wrap gap-2 mb-3">
-  <form id="bulk-archive-residents" method="post" action="{{ url_for('main.bulk_archive_residents') }}">
+  <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <form id="bulk-archive-residents" method="post" action="{{ url_for('main.bulk_archive_residents') }}" class="d-flex">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn btn-danger btn-sm" id="bulk-archive-residents-btn" disabled>Archive Selected</button>
   </form>
-  <form id="bulk-issue-docs" method="post" action="{{ url_for('main.bulk_issue_documents') }}" class="d-flex gap-1">
+  <form id="bulk-issue-docs" method="post" action="{{ url_for('main.bulk_issue_documents') }}" class="d-flex gap-1 align-items-center">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <select name="document_type_id" class="form-select form-select-sm" style="min-width:140px;" required>
+    <select name="document_type_id" class="form-select form-select-sm" style="min-width:160px;" required>
       <option value="">Select document type...</option>
       {% for dt in document_types %}
         <option value="{{ dt.id }}">{{ dt.name }}</option>

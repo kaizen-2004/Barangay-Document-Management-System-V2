@@ -31,18 +31,25 @@
 
                 <div class="bdm-camera-panel">
                     <div class="bdm-camera-panel-title">2. Captured Preview</div>
-                    <div class="bdm-camera-frame">
-                      <img id="captured_preview" alt="Captured preview" />
+                    <div class="bdm-camera-frame" style="position:relative; overflow:hidden;">
+                      <img id="captured_preview" alt="Captured preview" style="width:100%; height:auto;" />
+                  <div id="photo_crop_box" style="display:none; position:absolute; border:2px dashed #0d6efd; background:rgba(13,110,253,0.08); cursor:move; z-index:10;">
+                    <div class="photo-crop-handle photo-crop-nw" style="position:absolute; top:-5px; left:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:nw-resize;"></div>
+                    <div class="photo-crop-handle photo-crop-ne" style="position:absolute; top:-5px; right:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:ne-resize;"></div>
+                    <div class="photo-crop-handle photo-crop-sw" style="position:absolute; bottom:-5px; left:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:sw-resize;"></div>
+                    <div class="photo-crop-handle photo-crop-se" style="position:absolute; bottom:-5px; right:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:se-resize;"></div>
+                    <div class="photo-crop-handle photo-crop-n" style="position:absolute; top:-5px; left:calc(50% - 6px); width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:n-resize;"></div>
+                    <div class="photo-crop-handle photo-crop-s" style="position:absolute; bottom:-5px; left:calc(50% - 6px); width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:s-resize;"></div>
+                    <div class="photo-crop-handle photo-crop-w" style="position:absolute; top:calc(50% - 6px); left:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:w-resize;"></div>
+                    <div class="photo-crop-handle photo-crop-e" style="position:absolute; top:calc(50% - 6px); right:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:e-resize;"></div>
+                  </div>
                     </div>
-                    <div class="bdm-crop-controls">
-                      <label for="crop_zoom">Crop / Zoom</label>
-                      <input type="range" id="crop_zoom" class="form-range" min="1" max="2.5" step="0.05" value="1.2" disabled>
-                      <label for="crop_x">Move Left / Right</label>
-                      <input type="range" id="crop_x" class="form-range" min="-1" max="1" step="0.02" value="0" disabled>
-                      <label for="crop_y">Move Up / Down</label>
-                      <input type="range" id="crop_y" class="form-range" min="-1" max="1" step="0.02" value="0" disabled>
-                      <label for="crop_rotate">Rotate</label>
-                      <input type="range" id="crop_rotate" class="form-range" min="-180" max="180" step="1" value="0" disabled>
+                    <div id="photo_crop_controls" style="display:none;">
+                      <div class="form-text mb-2">Drag the blue box to select the face area, or click "Auto Crop".</div>
+                      <div class="d-flex gap-2 mb-2">
+                        <button type="button" id="btn_photo_auto_crop" class="btn btn-outline-secondary btn-sm">Auto Crop</button>
+                        <button type="button" id="btn_photo_reset_crop" class="btn btn-outline-secondary btn-sm">Reset Crop</button>
+                      </div>
                       <label for="removal_level">Background Removal</label>
                       <input type="range" id="removal_level" class="form-range" min="1" max="3" step="1" value="2" disabled>
                       <div class="d-flex justify-content-between">
@@ -77,22 +84,73 @@
         <div class="bdm-camera-card-header">
             <div>
                 <div class="bdm-camera-title"><i class="fas fa-pen me-1"></i> Resident Signature</div>
-                <div class="bdm-camera-subtitle">Draw your signature using mouse, touch, or stylus.</div>
+                <div class="bdm-camera-subtitle">Have the resident sign on white paper, then capture it with the camera.</div>
             </div>
         </div>
         <div class="bdm-camera-grid">
-            <div class="bdm-camera-panel bdm-sig-panel">
-                <canvas id="sigCanvas" width="500" height="150"
-                    style="width:100%; height:auto; aspect-ratio:10/3; border:2px solid #ccc; border-radius:0.5rem; cursor:crosshair; touch-action:none;"></canvas>
-                <div class="bdm-camera-actions mt-2">
-                    <button type="button" id="btnClearSig" class="btn btn-outline-secondary btn-sm">Clear</button>
-                    <button type="button" id="btnSaveSig" class="btn btn-success btn-sm">Save Signature</button>
+            <div class="bdm-camera-panel">
+                <div class="bdm-camera-panel-title">1. Camera</div>
+                <div class="bdm-camera-frame">
+                  <video id="sig_video" autoplay playsinline></video>
+                  <canvas id="sig_cam_canvas" class="d-none"></canvas>
                 </div>
-                <div class="form-text mt-2">Sign above, then click "Save Signature". A preview will appear below.</div>
-                <img id="sigPreview" style="display:none; max-width:100%; height:auto; max-height:3.75rem; margin-top:0.5rem; border:1px solid #ddd; border-radius:0.25rem; padding:0.25rem;" />
-                {{ form.signature_data(id='signature_data') }}
+                <div class="bdm-camera-actions">
+                    <button type="button" id="btn_sig_start" class="btn btn-outline-primary btn-sm">Start Camera</button>
+                    <button type="button" id="btn_sig_capture" class="btn btn-primary btn-sm" disabled>Capture Signature</button>
+                    <button type="button" id="btn_sig_retake" class="btn btn-outline-secondary btn-sm" disabled>Retake</button>
+                </div>
+                <div id="sig_camera_status" class="form-text mt-2"></div>
+            </div>
+
+            <div class="bdm-camera-panel">
+                <div class="bdm-camera-panel-title">2. Crop &amp; Process</div>
+                <div class="bdm-camera-frame" style="position:relative; overflow:hidden;">
+                  <img id="sig_captured_preview" alt="Captured signature" style="display:none; width:100%; height:auto;" />
+                  <div id="sig_crop_box" style="display:none; position:absolute; border:2px dashed #0d6efd; background:rgba(13,110,253,0.08); cursor:move; z-index:10;">
+                    <div class="sig-crop-handle sig-crop-nw" style="position:absolute; top:-5px; left:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:nw-resize;"></div>
+                    <div class="sig-crop-handle sig-crop-ne" style="position:absolute; top:-5px; right:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:ne-resize;"></div>
+                    <div class="sig-crop-handle sig-crop-sw" style="position:absolute; bottom:-5px; left:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:sw-resize;"></div>
+                    <div class="sig-crop-handle sig-crop-se" style="position:absolute; bottom:-5px; right:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:se-resize;"></div>
+                    <div class="sig-crop-handle sig-crop-n" style="position:absolute; top:-5px; left:calc(50% - 6px); width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:n-resize;"></div>
+                    <div class="sig-crop-handle sig-crop-s" style="position:absolute; bottom:-5px; left:calc(50% - 6px); width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:s-resize;"></div>
+                    <div class="sig-crop-handle sig-crop-w" style="position:absolute; top:calc(50% - 6px); left:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:w-resize;"></div>
+                    <div class="sig-crop-handle sig-crop-e" style="position:absolute; top:calc(50% - 6px); right:-5px; width:12px; height:12px; background:#0d6efd; border-radius:50%; cursor:e-resize;"></div>
+                  </div>
+                </div>
+                <div id="sig_crop_controls" style="display:none;">
+                  <div class="form-text mb-2">Drag the blue box to select the signature area, or click "Auto Crop".</div>
+                  <div class="d-flex gap-2 mb-2">
+                    <button type="button" id="btn_sig_auto_crop" class="btn btn-outline-secondary btn-sm">Auto Crop</button>
+                    <button type="button" id="btn_sig_reset_crop" class="btn btn-outline-secondary btn-sm">Reset Crop</button>
+                  </div>
+                  <label for="sig_ink_sensitivity">Ink Sensitivity</label>
+                  <input type="range" id="sig_ink_sensitivity" class="form-range" min="5" max="50" step="1" value="15">
+                  <div class="d-flex justify-content-between">
+                    <small class="text-muted">Low (markers only)</small>
+                    <small class="text-muted">High (ballpoint pens)</small>
+                  </div>
+                </div>
+                <div class="bdm-camera-actions mt-2">
+                  <button type="button" id="btn_sig_process" class="btn btn-primary btn-sm" disabled>Process Signature</button>
+                </div>
+            </div>
+
+            <div class="bdm-camera-panel">
+                <div class="bdm-camera-panel-title">3. Processed Signature</div>
+                <div class="bdm-camera-frame">
+                  <img id="sig_preview" alt="Signature preview" />
+                  <div id="sig_processing_indicator" class="bdm-processing-overlay" style="display:none;">
+                    <div class="bdm-processing-spinner"></div>
+                    <div class="bdm-processing-text">Processing signature…</div>
+                  </div>
+                </div>
+                <div class="form-text mt-2">The system removes the paper background.</div>
+                <div class="bdm-camera-actions mt-2">
+                  <button type="button" id="btn_sig_use" class="btn btn-success btn-sm" disabled>Use This Signature</button>
+                </div>
             </div>
         </div>
+        {{ form.signature_data(id='signature_data') }}
     </div>
 
     <div class="bdm-form-section mb-3">
@@ -251,33 +309,35 @@
   const video = document.getElementById('cam_video');
   const canvas = document.getElementById('cam_canvas');
   const capturedPreview = document.getElementById('captured_preview');
+  const photoCropBox = document.getElementById('photo_crop_box');
+  const photoCropControls = document.getElementById('photo_crop_controls');
   const processedPreview = document.getElementById('photo_preview');
   const processingIndicator = document.getElementById('photo_processing_indicator');
   const photoData = document.getElementById('photo_data');
   const status = document.getElementById('camera_status');
-  const cropZoom = document.getElementById('crop_zoom');
-  const cropX = document.getElementById('crop_x');
-  const cropY = document.getElementById('crop_y');
-  const cropRotate = document.getElementById('crop_rotate');
   const removalLevel = document.getElementById('removal_level');
 
   const btnStart = document.getElementById('btn_start');
   const btnCapture = document.getElementById('btn_capture');
   const btnRetake = document.getElementById('btn_retake');
   const btnUsePhoto = document.getElementById('btn_use_photo');
+  const btnPhotoAutoCrop = document.getElementById('btn_photo_auto_crop');
+  const btnPhotoResetCrop = document.getElementById('btn_photo_reset_crop');
   const fallbackUpload = document.getElementById('fallback_upload');
   const btnFallbackUpload = document.getElementById('btn_fallback_upload');
 
   let stream = null;
-  let capturedDataUrl = '';
   let rawCapturedDataUrl = '';
-  let cropImage = null;
+  let capturedDataUrl = '';
   let currentOriginalPath = '';
   let currentProcessedPath = '';
   let processing = false;
   let formSubmitting = false;
   const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
   const form = document.querySelector('form');
+
+  // Photo crop state (percentages of image, square)
+  let photoCrop = { top: 0, left: 0, size: 100 };
 
   function setStatus(message, isError = false) {
     if (!status) return;
@@ -289,6 +349,146 @@
   function isSecureContext() {
     return window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
   }
+
+  function updatePhotoCropBoxVisual() {
+    if (!photoCropBox || !capturedPreview || capturedPreview.style.display === 'none') return;
+    const imgW = capturedPreview.clientWidth;
+    const imgH = capturedPreview.clientHeight;
+    const side = Math.min(imgW, imgH);
+    photoCropBox.style.left = (side * photoCrop.left / 100) + 'px';
+    photoCropBox.style.top = (side * photoCrop.top / 100) + 'px';
+    photoCropBox.style.width = (side * photoCrop.size / 100) + 'px';
+    photoCropBox.style.height = (side * photoCrop.size / 100) + 'px';
+  }
+
+  function getCroppedPhotoDataUrl() {
+    if (!rawCapturedDataUrl) return '';
+    const img = new Image();
+    img.src = rawCapturedDataUrl;
+    if (!img.naturalWidth) return rawCapturedDataUrl;
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const side = Math.min(w, h);
+    const sx = Math.round(side * photoCrop.left / 100);
+    const sy = Math.round(side * photoCrop.top / 100);
+    const sw = Math.round(side * photoCrop.size / 100);
+    const c = document.createElement('canvas');
+    c.width = sw;
+    c.height = sw;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, sx, sy, sw, sw, 0, 0, sw, sw);
+    capturedDataUrl = c.toDataURL('image/jpeg', 0.92);
+    return capturedDataUrl;
+  }
+
+  function autoCropPhoto() {
+    if (!rawCapturedDataUrl) return;
+    const img = new Image();
+    img.src = rawCapturedDataUrl;
+    if (!img.naturalWidth) return;
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const side = Math.min(w, h);
+    // Center the crop box (face is usually in the center for ID photos)
+    const targetSize = 70;
+    photoCrop = {
+      top: Math.max(0, (100 - targetSize) / 2),
+      left: Math.max(0, (100 - targetSize) / 2),
+      size: targetSize
+    };
+    updatePhotoCropBoxVisual();
+    setSigStatus('Auto-cropped to center. Drag the box to adjust.');
+  }
+
+  // ── Photo crop box drag & resize ────────────────────────────────────
+  (function() {
+    let dragMode = null;
+    let startX, startY, startCrop;
+
+    function onPointerDown(e) {
+      if (!photoCropBox || photoCropBox.style.display === 'none') return;
+      e.preventDefault();
+      const handle = e.target.closest('.photo-crop-handle');
+      if (handle) {
+        if (handle.classList.contains('photo-crop-nw')) dragMode = 'nw';
+        else if (handle.classList.contains('photo-crop-ne')) dragMode = 'ne';
+        else if (handle.classList.contains('photo-crop-sw')) dragMode = 'sw';
+        else if (handle.classList.contains('photo-crop-se')) dragMode = 'se';
+        else if (handle.classList.contains('photo-crop-n')) dragMode = 'n';
+        else if (handle.classList.contains('photo-crop-s')) dragMode = 's';
+        else if (handle.classList.contains('photo-crop-w')) dragMode = 'w';
+        else if (handle.classList.contains('photo-crop-e')) dragMode = 'e';
+      } else if (e.target === photoCropBox) {
+        dragMode = 'move';
+      } else {
+        return;
+      }
+      startX = e.clientX;
+      startY = e.clientY;
+      startCrop = { ...photoCrop };
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', onPointerUp);
+    }
+
+    function onPointerMove(e) {
+      if (!dragMode) return;
+      const imgRect = capturedPreview.getBoundingClientRect();
+      const side = Math.min(imgRect.width, imgRect.height);
+      const dx = (e.clientX - startX) / side * 100;
+      const dy = (e.clientY - startY) / side * 100;
+
+      if (dragMode === 'move') {
+        photoCrop.left = Math.max(0, Math.min(100 - startCrop.size, startCrop.left + dx));
+        photoCrop.top = Math.max(0, Math.min(100 - startCrop.size, startCrop.top + dy));
+        photoCrop.size = startCrop.size;
+      } else if (dragMode === 'se') {
+        photoCrop.size = Math.max(10, Math.min(100 - Math.max(startCrop.left, startCrop.top), startCrop.size + dx));
+      } else if (dragMode === 'sw') {
+        const newSize = Math.max(10, startCrop.size - dx);
+        const newLeft = Math.min(startCrop.left + startCrop.size - 10, startCrop.left + (startCrop.size - newSize));
+        photoCrop.left = Math.max(0, newLeft);
+        photoCrop.size = newSize;
+      } else if (dragMode === 'ne') {
+        photoCrop.size = Math.max(10, Math.min(100 - Math.max(startCrop.left, startCrop.top), startCrop.size + dx));
+        const newTop = Math.min(startCrop.top + startCrop.size - 10, startCrop.top + (startCrop.size - Math.max(10, startCrop.size + dx)));
+        photoCrop.top = Math.max(0, newTop);
+        photoCrop.size = Math.max(10, startCrop.size + dy);
+      } else if (dragMode === 'nw') {
+        const newSize = Math.max(10, startCrop.size - Math.max(Math.abs(dx), Math.abs(dy)));
+        const newLeft = Math.min(startCrop.left + startCrop.size - 10, startCrop.left + (startCrop.size - newSize));
+        const newTop = Math.min(startCrop.top + startCrop.size - 10, startCrop.top + (startCrop.size - newSize));
+        photoCrop.left = Math.max(0, newLeft);
+        photoCrop.top = Math.max(0, newTop);
+        photoCrop.size = newSize;
+      } else if (dragMode === 'n') {
+        const newTop = Math.max(0, Math.min(startCrop.top + startCrop.size - 10, startCrop.top + dy));
+        photoCrop.size = startCrop.size + (startCrop.top - newTop);
+        photoCrop.top = newTop;
+      } else if (dragMode === 's') {
+        photoCrop.size = Math.max(10, Math.min(100 - startCrop.top, startCrop.size + dy));
+      } else if (dragMode === 'w') {
+        const newLeft = Math.max(0, Math.min(startCrop.left + startCrop.size - 10, startCrop.left + dx));
+        photoCrop.size = startCrop.size + (startCrop.left - newLeft);
+        photoCrop.left = newLeft;
+      } else if (dragMode === 'e') {
+        photoCrop.size = Math.max(10, Math.min(100 - startCrop.left, startCrop.size + dx));
+      }
+      updatePhotoCropBoxVisual();
+    }
+
+    function onPointerUp() {
+      dragMode = null;
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+    }
+
+    if (photoCropBox) {
+      photoCropBox.addEventListener('pointerdown', onPointerDown);
+      photoCropBox.querySelectorAll('.photo-crop-handle').forEach(h => {
+        h.addEventListener('pointerdown', onPointerDown);
+      });
+    }
+  })();
 
   async function startCamera() {
     if (!isSecureContext()) {
@@ -340,66 +540,37 @@
     const sy = Math.floor((srcH - side) / 2);
     ctx.drawImage(video, sx, sy, side, side, 0, 0, targetSize, targetSize);
 
-    // Use JPEG to keep file sizes manageable
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-    rawCapturedDataUrl = dataUrl;
-    cropImage = new Image();
-    cropImage.onload = renderCropPreview;
-    cropImage.src = dataUrl;
+    rawCapturedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    capturedPreview.src = rawCapturedDataUrl;
+    capturedPreview.style.display = 'block';
+    photoCropControls.style.display = 'block';
+    photoCrop = { top: 0, left: 0, size: 100 };
+    capturedPreview.onload = function() {
+      photoCropBox.style.display = 'block';
+      updatePhotoCropBoxVisual();
+    };
     photoData.value = '';
-    cropZoom.disabled = false;
-    cropX.disabled = false;
-    cropY.disabled = false;
-      cropZoom.value = '1.2';
-      cropX.value = '0';
-      cropY.value = '0';
-      cropRotate.disabled = false;
-      cropRotate.value = '0';
-      removalLevel.disabled = false;
-      processedPreview.removeAttribute('src');
+    removalLevel.disabled = false;
+    processedPreview.removeAttribute('src');
     btnRetake.disabled = false;
     btnUsePhoto.disabled = false;
-    setStatus('Photo captured. Review it, then click Remove Background if it looks good.');
+    setStatus('Photo captured. Drag the blue box to select the face area.');
   }
 
   function retakeCapture() {
     cleanupCurrentCapture();
     capturedDataUrl = '';
     rawCapturedDataUrl = '';
-    cropImage = null;
     photoData.value = '';
     capturedPreview.removeAttribute('src');
+    capturedPreview.style.display = 'none';
+    photoCropBox.style.display = 'none';
     processedPreview.removeAttribute('src');
-    cropZoom.disabled = true;
-    cropX.disabled = true;
-      cropY.disabled = true;
-      cropRotate.disabled = true;
-      removalLevel.disabled = true;
-      btnRetake.disabled = true;
+    photoCropControls.style.display = 'none';
+    removalLevel.disabled = true;
+    btnRetake.disabled = true;
     btnUsePhoto.disabled = true;
     setStatus('Retake the photo when ready.');
-  }
-
-  function renderCropPreview() {
-    if (!cropImage || !cropImage.naturalWidth || !cropImage.naturalHeight) return;
-    const targetSize = 700;
-    canvas.width = targetSize;
-    canvas.height = targetSize;
-    const ctx = canvas.getContext('2d');
-    const zoom = Number(cropZoom.value || 1);
-    const sourceSide = Math.min(cropImage.naturalWidth, cropImage.naturalHeight) / zoom;
-    const maxX = Math.max(0, cropImage.naturalWidth - sourceSide);
-    const maxY = Math.max(0, cropImage.naturalHeight - sourceSide);
-    const sx = Math.max(0, Math.min(maxX, (maxX / 2) + Number(cropX.value || 0) * (maxX / 2)));
-    const sy = Math.max(0, Math.min(maxY, (maxY / 2) + Number(cropY.value || 0) * (maxY / 2)));
-    ctx.save();
-    const angle = Number(cropRotate.value || 0) * Math.PI / 180;
-    ctx.translate(targetSize / 2, targetSize / 2);
-    ctx.rotate(angle);
-    ctx.drawImage(cropImage, sx, sy, sourceSide, sourceSide, -targetSize / 2, -targetSize / 2, targetSize, targetSize);
-    ctx.restore();
-    capturedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
-    capturedPreview.src = capturedDataUrl;
   }
 
   function cleanupCurrentCapture(keepalive = false) {
@@ -419,6 +590,7 @@
   }
 
   async function processPhoto() {
+    getCroppedPhotoDataUrl();
     if (processing || !capturedDataUrl) return;
     processing = true;
     btnUsePhoto.disabled = true;
@@ -452,7 +624,7 @@
       photoData.value = payload.processed_image_path;
       processedPreview.src = payload.processed_image_url;
       processedPreview.style.display = 'block';
-      setStatus(payload.warning || 'Background removed. Adjust crop/zoom and click Remove Background again if needed.');
+      setStatus(payload.warning || 'Background removed. Click Remove Background again if needed.');
     } catch (err) {
       setStatus(err.message || 'Background removal failed. Please retake the photo.', true);
     } finally {
@@ -467,6 +639,12 @@
   btnCapture?.addEventListener('click', capture);
   btnRetake?.addEventListener('click', retakeCapture);
   btnUsePhoto?.addEventListener('click', processPhoto);
+  btnPhotoAutoCrop?.addEventListener('click', autoCropPhoto);
+  btnPhotoResetCrop?.addEventListener('click', () => {
+    photoCrop = { top: 0, left: 0, size: 100 };
+    updatePhotoCropBoxVisual();
+    setStatus('Crop reset to full image.');
+  });
   btnFallbackUpload?.addEventListener('click', () => fallbackUpload?.click());
   fallbackUpload?.addEventListener('change', async () => {
     const file = fallbackUpload.files[0];
@@ -491,10 +669,6 @@
     }
     fallbackUpload.value = '';
   });
-  cropZoom?.addEventListener('input', renderCropPreview);
-  cropX?.addEventListener('input', renderCropPreview);
-  cropY?.addEventListener('input', renderCropPreview);
-  cropRotate?.addEventListener('input', renderCropPreview);
   form?.addEventListener('submit', (e) => {
     if (processing) {
       e.preventDefault();
@@ -507,113 +681,335 @@
   // If the form already has a value (e.g., validation failed), keep preview
   if (photoData?.value && photoData.value.startsWith('uploads/')) processedPreview.src = `/static/${photoData.value}`;
 
-  // ── Signature pad ──────────────────────────────────────────────────────
-  const sigCanvas = document.getElementById('sigCanvas');
-  const sigCtx = sigCanvas?.getContext('2d');
+  // ── Signature capture via camera ─────────────────────────────────────
+  const sigVideo = document.getElementById('sig_video');
+  const sigCamCanvas = document.getElementById('sig_cam_canvas');
+  const sigCapturedPreview = document.getElementById('sig_captured_preview');
+  const sigCropBox = document.getElementById('sig_crop_box');
+  const sigPreview = document.getElementById('sig_preview');
+  const sigProcessingIndicator = document.getElementById('sig_processing_indicator');
+  const sigCropControls = document.getElementById('sig_crop_controls');
   const sigData = document.getElementById('signature_data');
-  const sigPreview = document.getElementById('sigPreview');
-  const btnClearSig = document.getElementById('btnClearSig');
-  const btnSaveSig = document.getElementById('btnSaveSig');
-  let sigDrawing = false;
+  const sigStatus = document.getElementById('sig_camera_status');
+  const btnSigStart = document.getElementById('btn_sig_start');
+  const btnSigCapture = document.getElementById('btn_sig_capture');
+  const btnSigRetake = document.getElementById('btn_sig_retake');
+  const btnSigProcess = document.getElementById('btn_sig_process');
+  const btnSigUse = document.getElementById('btn_sig_use');
+  const btnSigAutoCrop = document.getElementById('btn_sig_auto_crop');
+  const btnSigResetCrop = document.getElementById('btn_sig_reset_crop');
+  let sigStream = null;
+  let sigRawDataUrl = '';
+  let sigSavedPath = '';
 
-  if (sigCanvas && sigCtx) {
-    sigCtx.strokeStyle = '#000';
-    sigCtx.lineWidth = 2;
-    sigCtx.lineCap = 'round';
-    sigCtx.lineJoin = 'round';
+  // Crop box state (percentages of image)
+  let sigCrop = { top: 0, left: 0, width: 100, height: 100 };
 
-    function sigGetPos(e) {
-      const rect = sigCanvas.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      return {
-        x: (clientX - rect.left) * (sigCanvas.width / rect.width),
-        y: (clientY - rect.top) * (sigCanvas.height / rect.height),
-      };
-    }
-
-    function sigStart(e) {
-      e.preventDefault();
-      sigDrawing = true;
-      const pos = sigGetPos(e);
-      sigCtx.beginPath();
-      sigCtx.moveTo(pos.x, pos.y);
-    }
-
-    function sigDraw(e) {
-      e.preventDefault();
-      if (!sigDrawing) return;
-      const pos = sigGetPos(e);
-      sigCtx.lineTo(pos.x, pos.y);
-      sigCtx.stroke();
-    }
-
-    function sigEnd(e) {
-      e.preventDefault();
-      sigDrawing = false;
-    }
-
-    sigCanvas.addEventListener('mousedown', sigStart);
-    sigCanvas.addEventListener('mousemove', sigDraw);
-    sigCanvas.addEventListener('mouseup', sigEnd);
-    sigCanvas.addEventListener('mouseleave', sigEnd);
-    sigCanvas.addEventListener('touchstart', sigStart, { passive: false });
-    sigCanvas.addEventListener('touchmove', sigDraw, { passive: false });
-    sigCanvas.addEventListener('touchend', sigEnd);
+  function setSigStatus(msg, isError = false) {
+    if (!sigStatus) return;
+    sigStatus.textContent = msg || '';
+    sigStatus.classList.toggle('text-danger', isError);
+    sigStatus.classList.toggle('text-muted', !isError);
   }
 
-  btnClearSig?.addEventListener('click', () => {
-    if (!sigCtx) return;
-    sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
-    sigData.value = '';
-    sigPreview.style.display = 'none';
-  });
+  function updateCropBoxVisual() {
+    if (!sigCropBox || !sigCapturedPreview || sigCapturedPreview.style.display === 'none') return;
+    const imgW = sigCapturedPreview.clientWidth;
+    const imgH = sigCapturedPreview.clientHeight;
+    sigCropBox.style.left = (imgW * sigCrop.left / 100) + 'px';
+    sigCropBox.style.top = (imgH * sigCrop.top / 100) + 'px';
+    sigCropBox.style.width = (imgW * sigCrop.width / 100) + 'px';
+    sigCropBox.style.height = (imgH * sigCrop.height / 100) + 'px';
+  }
 
-  btnSaveSig?.addEventListener('click', async () => {
-    if (!sigCanvas || !sigCtx || !sigData) return;
-    // Check canvas is not empty
-    const imageData = sigCtx.getImageData(0, 0, sigCanvas.width, sigCanvas.height);
-    const pixels = imageData.data;
-    let hasContent = false;
-    for (let i = 3; i < pixels.length; i += 4) {
-      if (pixels[i] > 0) { hasContent = true; break; }
+  function getCroppedSigDataUrl() {
+    if (!sigRawDataUrl) return '';
+    const img = new Image();
+    img.src = sigRawDataUrl;
+    if (!img.naturalWidth) return sigRawDataUrl;
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const sx = Math.round(w * sigCrop.left / 100);
+    const sy = Math.round(h * sigCrop.top / 100);
+    const sw = Math.round(w * sigCrop.width / 100);
+    const sh = Math.round(h * sigCrop.height / 100);
+    const c = document.createElement('canvas');
+    c.width = sw;
+    c.height = sh;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    return c.toDataURL('image/jpeg', 0.92);
+  }
+
+  function autoCropSignature() {
+    if (!sigRawDataUrl) return;
+    const img = new Image();
+    img.src = sigRawDataUrl;
+    if (!img.naturalWidth) return;
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = 0, maxY = 0;
+    const threshold = 220;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (data[i] < threshold || data[i+1] < threshold || data[i+2] < threshold) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
     }
-    if (!hasContent) {
-      setStatus('Please draw your signature first.', true);
+    if (maxX <= minX || maxY <= minY) return;
+    const pad = 10;
+    sigCrop.left = Math.max(0, (minX - pad) / w * 100);
+    sigCrop.top = Math.max(0, (minY - pad) / h * 100);
+    sigCrop.width = Math.min(100 - sigCrop.left, (maxX - minX + pad * 2) / w * 100);
+    sigCrop.height = Math.min(100 - sigCrop.top, (maxY - minY + pad * 2) / h * 100);
+    updateCropBoxVisual();
+    setSigStatus('Auto-cropped to signature. Drag to adjust if needed.');
+  }
+
+  // ── Drag & resize crop box ──────────────────────────────────────────
+  (function() {
+    let dragMode = null;
+    let startX, startY, startCrop;
+
+    function onPointerDown(e) {
+      if (!sigCropBox || sigCropBox.style.display === 'none') return;
+      e.preventDefault();
+      const handle = e.target.closest('.sig-crop-handle');
+      if (handle) {
+        if (handle.classList.contains('sig-crop-nw')) dragMode = 'nw';
+        else if (handle.classList.contains('sig-crop-ne')) dragMode = 'ne';
+        else if (handle.classList.contains('sig-crop-sw')) dragMode = 'sw';
+        else if (handle.classList.contains('sig-crop-se')) dragMode = 'se';
+        else if (handle.classList.contains('sig-crop-n')) dragMode = 'n';
+        else if (handle.classList.contains('sig-crop-s')) dragMode = 's';
+        else if (handle.classList.contains('sig-crop-w')) dragMode = 'w';
+        else if (handle.classList.contains('sig-crop-e')) dragMode = 'e';
+      } else if (e.target === sigCropBox) {
+        dragMode = 'move';
+      } else {
+        return;
+      }
+      startX = e.clientX;
+      startY = e.clientY;
+      startCrop = { ...sigCrop };
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', onPointerUp);
+    }
+
+    function onPointerMove(e) {
+      if (!dragMode) return;
+      const imgRect = sigCapturedPreview.getBoundingClientRect();
+      const dx = (e.clientX - startX) / imgRect.width * 100;
+      const dy = (e.clientY - startY) / imgRect.height * 100;
+
+      if (dragMode === 'move') {
+        sigCrop.left = Math.max(0, Math.min(100 - startCrop.width, startCrop.left + dx));
+        sigCrop.top = Math.max(0, Math.min(100 - startCrop.height, startCrop.top + dy));
+        sigCrop.width = startCrop.width;
+        sigCrop.height = startCrop.height;
+      } else if (dragMode === 'se') {
+        sigCrop.width = Math.max(5, Math.min(100 - startCrop.left, startCrop.width + dx));
+        sigCrop.height = Math.max(5, Math.min(100 - startCrop.top, startCrop.height + dy));
+      } else if (dragMode === 'sw') {
+        const newLeft = Math.max(0, Math.min(startCrop.left + startCrop.width - 5, startCrop.left + dx));
+        sigCrop.width = startCrop.width + (startCrop.left - newLeft);
+        sigCrop.left = newLeft;
+        sigCrop.height = Math.max(5, Math.min(100 - startCrop.top, startCrop.height + dy));
+      } else if (dragMode === 'ne') {
+        sigCrop.width = Math.max(5, Math.min(100 - startCrop.left, startCrop.width + dx));
+        const newTop = Math.max(0, Math.min(startCrop.top + startCrop.height - 5, startCrop.top + dy));
+        sigCrop.height = startCrop.height + (startCrop.top - newTop);
+        sigCrop.top = newTop;
+      } else if (dragMode === 'nw') {
+        const newLeft = Math.max(0, Math.min(startCrop.left + startCrop.width - 5, startCrop.left + dx));
+        sigCrop.width = startCrop.width + (startCrop.left - newLeft);
+        sigCrop.left = newLeft;
+        const newTop = Math.max(0, Math.min(startCrop.top + startCrop.height - 5, startCrop.top + dy));
+        sigCrop.height = startCrop.height + (startCrop.top - newTop);
+        sigCrop.top = newTop;
+      } else if (dragMode === 'n') {
+        const newTop = Math.max(0, Math.min(startCrop.top + startCrop.height - 5, startCrop.top + dy));
+        sigCrop.height = startCrop.height + (startCrop.top - newTop);
+        sigCrop.top = newTop;
+      } else if (dragMode === 's') {
+        sigCrop.height = Math.max(5, Math.min(100 - startCrop.top, startCrop.height + dy));
+      } else if (dragMode === 'w') {
+        const newLeft = Math.max(0, Math.min(startCrop.left + startCrop.width - 5, startCrop.left + dx));
+        sigCrop.width = startCrop.width + (startCrop.left - newLeft);
+        sigCrop.left = newLeft;
+      } else if (dragMode === 'e') {
+        sigCrop.width = Math.max(5, Math.min(100 - startCrop.left, startCrop.width + dx));
+      }
+      updateCropBoxVisual();
+    }
+
+    function onPointerUp() {
+      dragMode = null;
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+    }
+
+    if (sigCropBox) {
+      sigCropBox.addEventListener('pointerdown', onPointerDown);
+      sigCropBox.querySelectorAll('.sig-crop-handle').forEach(h => {
+        h.addEventListener('pointerdown', onPointerDown);
+      });
+    }
+  })();
+
+  async function startSigCamera() {
+    if (!isSecureContext()) {
+      setSigStatus('Camera requires HTTPS. Use start-ssl.bat or access via localhost.', true);
       return;
     }
-    btnSaveSig.disabled = true;
-    setStatus('Saving signature...');
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setSigStatus('Camera not supported in this browser.', true);
+      return;
+    }
     try {
-      const dataUrl = sigCanvas.toDataURL('image/png');
-      const response = await fetch('{{ url_for("main.process_signature") }}', {
+      sigStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      sigVideo.srcObject = sigStream;
+      btnSigCapture.disabled = false;
+      btnSigStart.disabled = true;
+      setSigStatus('Camera ready. Hold the signed paper in front of the camera.');
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        setSigStatus('Camera permission denied.', true);
+      } else if (err.name === 'NotFoundError') {
+        setSigStatus('No camera found.', true);
+      } else {
+        setSigStatus('Unable to access camera.', true);
+      }
+    }
+  }
+
+  function stopSigCamera() {
+    if (sigStream) {
+      sigStream.getTracks().forEach(t => t.stop());
+      sigStream = null;
+    }
+    sigVideo.srcObject = null;
+    btnSigCapture.disabled = true;
+    btnSigStart.disabled = false;
+  }
+
+  function captureSig() {
+    if (!sigVideo.videoWidth || !sigVideo.videoHeight) return;
+    const w = sigVideo.videoWidth;
+    const h = sigVideo.videoHeight;
+    sigCamCanvas.width = w;
+    sigCamCanvas.height = h;
+    const ctx = sigCamCanvas.getContext('2d');
+    ctx.drawImage(sigVideo, 0, 0, w, h);
+    sigRawDataUrl = sigCamCanvas.toDataURL('image/jpeg', 0.92);
+    sigCapturedPreview.src = sigRawDataUrl;
+    sigCapturedPreview.style.display = 'block';
+    sigCropControls.style.display = 'block';
+    sigCrop = { top: 0, left: 0, width: 100, height: 100 };
+    sigCapturedPreview.onload = function() {
+      sigCropBox.style.display = 'block';
+      updateCropBoxVisual();
+      autoCropSignature();
+    };
+    btnSigRetake.disabled = false;
+    btnSigProcess.disabled = false;
+    btnSigUse.disabled = true;
+    sigPreview.removeAttribute('src');
+    sigPreview.style.display = 'none';
+    setSigStatus('Signature captured. Drag the blue box to select the signature area.');
+  }
+
+  async function processSigCapture() {
+    const croppedDataUrl = getCroppedSigDataUrl();
+    if (!croppedDataUrl) return;
+    btnSigProcess.disabled = true;
+    btnSigUse.disabled = true;
+    if (sigProcessingIndicator) sigProcessingIndicator.style.display = 'flex';
+    setSigStatus('Processing signature...');
+    try {
+      const resp = await fetch('{{ url_for("main.process_signature_photo") }}', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRFToken': csrfToken,
         },
-        body: JSON.stringify({ image_data: dataUrl }),
+        body: JSON.stringify({ image_data: croppedDataUrl, ink_sensitivity: Number(document.getElementById('sig_ink_sensitivity')?.value) || 15 }),
       });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) throw new Error(payload.error || 'Signature save failed.');
-      sigData.value = payload.signature_path;
+      const payload = await resp.json();
+      if (!resp.ok || !payload.success) throw new Error(payload.error || 'Signature processing failed.');
+      sigSavedPath = payload.signature_path;
+      sigData.value = sigSavedPath;
       sigPreview.src = payload.signature_url;
       sigPreview.style.display = 'block';
-      setStatus('Signature saved successfully.');
+      btnSigUse.disabled = false;
+      setSigStatus('Signature processed. Click "Use This Signature" to save.');
     } catch (err) {
-      setStatus(err.message || 'Failed to save signature.', true);
+      setSigStatus(err.message || 'Failed to process signature.', true);
     } finally {
-      btnSaveSig.disabled = false;
+      btnSigProcess.disabled = false;
+      if (sigProcessingIndicator) sigProcessingIndicator.style.display = 'none';
+    }
+  }
+
+  function retakeSig() {
+    sigRawDataUrl = '';
+    sigSavedPath = '';
+    sigData.value = '';
+    sigCapturedPreview.removeAttribute('src');
+    sigCapturedPreview.style.display = 'none';
+    sigCropBox.style.display = 'none';
+    sigPreview.removeAttribute('src');
+    sigPreview.style.display = 'none';
+    sigCropControls.style.display = 'none';
+    sigCrop = { top: 0, left: 0, width: 100, height: 100 };
+    btnSigRetake.disabled = true;
+    btnSigProcess.disabled = true;
+    btnSigUse.disabled = true;
+    setSigStatus('Retake the signature when ready.');
+  }
+
+  btnSigStart?.addEventListener('click', startSigCamera);
+  btnSigCapture?.addEventListener('click', captureSig);
+  btnSigRetake?.addEventListener('click', retakeSig);
+  btnSigProcess?.addEventListener('click', processSigCapture);
+  btnSigAutoCrop?.addEventListener('click', autoCropSignature);
+  btnSigResetCrop?.addEventListener('click', () => {
+    sigCrop = { top: 0, left: 0, width: 100, height: 100 };
+    updateCropBoxVisual();
+    setSigStatus('Crop reset to full image.');
+  });
+  btnSigUse?.addEventListener('click', () => {
+    if (sigSavedPath) {
+      sigData.value = sigSavedPath;
+      setSigStatus('Signature saved.');
+      stopSigCamera();
     }
   });
 
-  // Restore existing signature preview on page load (edit mode / validation error)
+  // Restore existing signature preview on page load (edit mode)
   if (sigData?.value && sigData.value.startsWith('uploads/') && sigPreview) {
     sigPreview.src = `/static/${sigData.value}`;
     sigPreview.style.display = 'block';
+    btnSigUse.disabled = false;
   }
 
-  // ── End signature pad ──────────────────────────────────────────────────
+  // Stop signature camera on page unload
+  window.addEventListener('beforeunload', () => {
+    stopSigCamera();
+  });
+
+  // ── End signature capture ────────────────────────────────────────────
 
   // Stop camera on page unload
   window.addEventListener('beforeunload', () => {

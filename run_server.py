@@ -212,7 +212,7 @@ def main() -> None:
         print(f" * Access via:\n{urls}")
         print(f" * Camera works on localhost:\n     http://localhost:{port}\n")
         webbrowser.open(f"http://localhost:{port}")
-        serve(app, host=host, port=port)
+        serve(app, host=host, port=port, channel_timeout=120, cleanup_interval=30)
 
 
 if __name__ == "__main__":

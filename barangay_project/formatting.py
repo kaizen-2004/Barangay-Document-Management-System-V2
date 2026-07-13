@@ -9,8 +9,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from docxtpl import InlineImage
-
 # ── hardcoded barangay context ──────────────────────────────────────
 
 BARANGAY_NAME = "Krus Na Ligas"
@@ -110,9 +108,14 @@ def apply_document_formatting(context: dict[str, Any]) -> dict[str, Any]:
     """
     formatted: dict[str, Any] = {}
     for key, value in context.items():
-        if isinstance(value, InlineImage):
-            formatted[key] = value
-        elif isinstance(value, str):
+        try:
+            from docxtpl import InlineImage
+            if isinstance(value, InlineImage):
+                formatted[key] = value
+                continue
+        except ImportError:
+            pass
+        if isinstance(value, str):
             if key.endswith("_number") and value:
                 formatted[key] = format_ph_mobile(value).upper()
             else:

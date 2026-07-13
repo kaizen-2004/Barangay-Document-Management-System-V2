@@ -33,4 +33,8 @@ if "%1"=="--ssl" (
 )
 echo ============================================
 echo  Close "Barangay Server" window to stop.
+echo.
+echo  If other PCs can't access this system,
+echo  run setup-firewall.bat as Administrator.
+echo ============================================
 pause

@@ -122,14 +122,14 @@ class LoginForm(FlaskForm):
 
 
 class UserForm(FlaskForm):
-    """Form for creating or editing user accounts.
+    """Form for creating a new user account.
 
-    Administrators can use this form to add new users.  It includes
-    fields for username, password and role.  The role field allows
-    selection between admin and clerk roles.  Additional roles can be
-    added by modifying the choices list.
+    The role dropdown can be extended by adding additional choices to
+    the `choices` list.  Currently only admin and clerk roles are
+    supported, but this can be expanded by modifying the choices list.
     """
     username = StringField("Username", validators=[DataRequired()])
+    email = StringField("Email", validators=[Optional()])
     password = PasswordField("Password", validators=[DataRequired(), password_strength_required])
     role = SelectField(
         "Role",
@@ -147,6 +147,7 @@ class EditUserForm(FlaskForm):
     to update usernames, roles and optionally reset passwords.
     """
     username = StringField("Username", validators=[DataRequired()])
+    email = StringField("Email", validators=[Optional()])
     password = PasswordField("New Password", validators=[Optional(), password_strength_required])
     role = SelectField(
         "Role",
@@ -190,3 +191,20 @@ class DeleteForm(FlaskForm):
     """Tiny form used only to attach CSRF to POST delete actions."""
 
     submit = SubmitField("Delete")
+
+
+class ForgotPasswordForm(FlaskForm):
+    """Form for requesting a password reset code via email."""
+
+    username = StringField("Username", validators=[DataRequired()])
+    submit = SubmitField("Send Reset Code")
+
+
+class ResetPasswordForm(FlaskForm):
+    """Form for resetting password with a 6-digit code."""
+
+    email = StringField("Email", validators=[DataRequired()])
+    code = StringField("6-Digit Code", validators=[DataRequired(), Length(min=6, max=6)])
+    new_password = PasswordField("New Password", validators=[DataRequired(), password_strength_required])
+    confirm_password = PasswordField("Confirm Password", validators=[DataRequired(), EqualTo("new_password", message="Passwords must match")])
+    submit = SubmitField("Reset Password")

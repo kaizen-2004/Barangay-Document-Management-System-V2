@@ -228,6 +228,112 @@ def save_or_keep_resident_signature(value: str | None) -> str | None:
     return save_signature_data_url(value, "signatures")
 
 
+def process_captured_signature(data_url: str, ink_sensitivity: int = 15) -> str | None:
+    """Process a camera-captured signature: auto-crop to ink, remove white background.
+
+    Uses adaptive contrast to extract dark ink from white paper regardless
+    of lighting conditions. The paper background becomes transparent and the
+    ink is preserved as black on transparent.
+    """
+    import logging
+    from io import BytesIO
+
+    from PIL import Image, ImageFilter
+
+    logger = logging.getLogger(__name__)
+
+    if not data_url:
+        return None
+
+    m = _DATA_URL_RE.match(data_url.strip())
+    if not m:
+        return None
+
+    try:
+        raw = base64.b64decode(m.group("data"), validate=True)
+    except Exception:
+        logger.exception("Failed to decode base64 signature data")
+        return None
+
+    try:
+        img = Image.open(BytesIO(raw))
+    except Exception:
+        logger.exception("Failed to open signature image")
+        return None
+
+    # Step 1: Convert to grayscale
+    gray = img.convert("L")
+
+    # Step 2: Blur slightly to reduce camera noise
+    gray = gray.filter(ImageFilter.GaussianBlur(radius=1))
+
+    # Step 3: Find the paper's brightness (median of the image = likely paper)
+    pixels = list(gray.getdata())
+    pixels.sort()
+    paper_brightness = pixels[len(pixels) // 2]
+
+    # Step 4: Adaptive threshold — anything darker than paper is ink
+    # ink_sensitivity: lower = stricter (markers only), higher = more sensitive (ballpoint pens)
+    ink_threshold = min(paper_brightness - ink_sensitivity, 200)
+    ink_threshold = max(ink_threshold, 60)
+
+    # Step 5: Create ink mask — dark pixels = ink
+    ink_mask = gray.point(lambda p: 0 if p < ink_threshold else 255)
+
+    # Step 6: Dilate the mask slightly to capture thin strokes
+    ink_mask = ink_mask.filter(ImageFilter.MaxFilter(size=3))
+
+    # Step 7: Find bounding box of ink
+    bbox = ink_mask.getbbox()
+    if not bbox:
+        logger.warning("No ink detected in signature capture, saving as-is")
+        final = img.convert("RGBA")
+    else:
+        # Step 8: Crop with generous padding
+        padding = 20
+        x1 = max(0, bbox[0] - padding)
+        y1 = max(0, bbox[1] - padding)
+        x2 = min(img.width, bbox[2] + padding)
+        y2 = min(img.height, bbox[3] + padding)
+
+        cropped_gray = gray.crop((x1, y1, x2, y2))
+        cropped_mask = ink_mask.crop((x1, y1, x2, y2))
+
+        # Step 9: Create clean output — black ink on transparent background
+        w, h = cropped_gray.size
+        output = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        gray_data = cropped_gray.load()
+        mask_data = cropped_mask.load()
+        out_data = output.load()
+
+        for y in range(h):
+            for x in range(w):
+                brightness = gray_data[x, y]
+                is_ink = mask_data[x, y] < 128
+                if is_ink:
+                    # Darker ink = more opaque; lighter ink = semi-transparent
+                    alpha = int(max(0, min(255, (paper_brightness - brightness) * 255 / paper_brightness)))
+                    alpha = max(alpha, 100)
+                    out_data[x, y] = (0, 0, 0, alpha)
+                else:
+                    out_data[x, y] = (0, 0, 0, 0)
+
+        final = output
+
+    # Save to uploads
+    upload_root = current_app.config.get(
+        "UPLOAD_FOLDER", os.path.join(current_app.static_folder, "uploads")
+    )
+    target_dir = os.path.join(upload_root, "original", "signatures")
+    os.makedirs(target_dir, exist_ok=True)
+
+    unique_name = f"{uuid.uuid4().hex}.png"
+    abs_path = os.path.join(target_dir, unique_name)
+    final.save(abs_path, format="PNG")
+
+    return f"uploads/original/signatures/{unique_name}"
+
+
 def delete_capture_photo_paths(paths: list[str]) -> int:
     """Delete temporary capture files under uploads/photos only."""
     upload_root = current_app.config.get(

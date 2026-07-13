@@ -3,9 +3,31 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import cv2
-import numpy as np
-from PIL import Image, ImageOps
+cv2 = None
+np = None
+
+
+def _ensure_cv2():
+    global cv2, np
+    if cv2 is None:
+        try:
+            import cv2 as _cv2
+            import numpy as _np
+            cv2 = _cv2
+            np = _np
+        except ImportError:
+            raise ImportError(
+                "opencv-python-headless and numpy are required for ID photo processing. "
+                "Install with: uv sync --extra ml"
+            )
+
+
+def ml_available() -> bool:
+    try:
+        _ensure_cv2()
+        return True
+    except ImportError:
+        return False
 
 _REMBG_SESSION = None
 _REMBG_MODEL_NAME = "u2net_human_seg"
@@ -100,7 +122,8 @@ class IDPhotoPipeline:
                     raise
         return _REMBG_SESSION
 
-    def process(self, input_path: str) -> np.ndarray:
+    def process(self, input_path: str):
+        _ensure_cv2()
         image = self._load_image(input_path)
 
         h, w = image.shape[:2]
@@ -132,20 +155,24 @@ class IDPhotoPipeline:
         return result
 
     def process_to_file(self, input_path: str, output_path: str) -> str:
+        from PIL import Image as PILImage
         rgba = self.process(input_path)
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(rgba, "RGBA").save(output_path, format="PNG")
+        PILImage.fromarray(rgba, "RGBA").save(output_path, format="PNG")
         return output_path
 
     @staticmethod
-    def _load_image(input_path: str) -> np.ndarray:
-        with Image.open(input_path) as pil_img:
+    def _load_image(input_path: str):
+        from PIL import Image as PILImage, ImageOps
+        _ensure_cv2()
+        with PILImage.open(input_path) as pil_img:
             pil_img = ImageOps.exif_transpose(pil_img)
             pil_img = pil_img.convert("RGB")
         return np.array(pil_img, dtype=np.uint8)
 
     @staticmethod
-    def _assess_quality(image: np.ndarray) -> dict:
+    def _assess_quality(image) -> dict:
+        _ensure_cv2()
         lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB).astype(np.float32)
 
         h, w = lab.shape[:2]
@@ -188,7 +215,8 @@ class IDPhotoPipeline:
             "needs_any": needs_exposure or needs_wb or needs_contrast or needs_sharpen,
         }
 
-    def _normalize(self, image: np.ndarray, metrics: dict) -> np.ndarray:
+    def _normalize(self, image, metrics: dict):
+        _ensure_cv2()
         result = image.copy()
         lab = cv2.cvtColor(result, cv2.COLOR_RGB2LAB).astype(np.float32)
 
@@ -233,7 +261,8 @@ class IDPhotoPipeline:
 
         return result
 
-    def _adjust_brightness(self, image: np.ndarray, metrics: dict) -> np.ndarray:
+    def _adjust_brightness(self, image, metrics: dict):
+        _ensure_cv2()
         result = image.copy()
         lab = cv2.cvtColor(result, cv2.COLOR_RGB2LAB).astype(np.float32)
 
@@ -260,14 +289,16 @@ class IDPhotoPipeline:
         return result
 
     @staticmethod
-    def _unsharp_mask(image: np.ndarray, amount: float, radius: float) -> np.ndarray:
+    def _unsharp_mask(image, amount: float, radius: float):
+        _ensure_cv2()
         if amount <= 0:
             return image
         blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=radius)
         sharpened = cv2.addWeighted(image, 1.0 + amount, blurred, -amount, 0)
         return np.clip(sharpened, 0, 255).astype(np.uint8)
 
-    def _segment(self, image: np.ndarray) -> np.ndarray:
+    def _segment(self, image):
+        _ensure_cv2()
         from rembg import remove
         import os as _os
 
@@ -281,7 +312,8 @@ class IDPhotoPipeline:
             small = image
 
         session = self._get_rembg_session()
-        rgb_pil = Image.fromarray(small, "RGB")
+        from PIL import Image as PILImage
+        rgb_pil = PILImage.fromarray(small, "RGB")
         buf = BytesIO()
         rgb_pil.save(buf, format="PNG")
         input_bytes = buf.getvalue()
@@ -296,7 +328,8 @@ class IDPhotoPipeline:
             post_process_mask=True,
         )
 
-        with Image.open(BytesIO(output_bytes)) as result:
+        with PILImage.open(BytesIO(output_bytes)) as result:
+            from PIL import ImageOps
             rgba = ImageOps.exif_transpose(result).convert("RGBA")
 
         rgba_np = np.array(rgba, dtype=np.uint8)
@@ -307,7 +340,8 @@ class IDPhotoPipeline:
 
         return alpha
 
-    def _generate_trimap(self, alpha: np.ndarray) -> np.ndarray:
+    def _generate_trimap(self, alpha):
+        _ensure_cv2()
         trimap = np.zeros_like(alpha, dtype=np.uint8)
         trimap[alpha >= 0.95] = 255
         trimap[alpha <= 0.05] = 0
@@ -330,7 +364,8 @@ class IDPhotoPipeline:
         return trimap
 
     @staticmethod
-    def _analyze_boundary_complexity(trimap: np.ndarray) -> float:
+    def _analyze_boundary_complexity(trimap) -> float:
+        _ensure_cv2()
         unknown = (trimap == 128).astype(np.float32)
         unknown_ratio = float(np.sum(unknown)) / max(trimap.size, 1)
 
@@ -349,10 +384,12 @@ class IDPhotoPipeline:
 
         return min(complexity + unknown_ratio * 2.0, 1.0)
 
-    def _refine_boundary(self, image: np.ndarray, alpha: np.ndarray, trimap: np.ndarray) -> np.ndarray:
+    def _refine_boundary(self, image, alpha, trimap):
+        _ensure_cv2()
         return self._guided_filter_alpha(image, alpha, trimap)
 
-    def _refine_boundary_direct(self, alpha: np.ndarray, trimap: np.ndarray) -> np.ndarray:
+    def _refine_boundary_direct(self, alpha, trimap):
+        _ensure_cv2()
         unknown = (trimap == 128)
         result = alpha.copy()
 
@@ -366,7 +403,8 @@ class IDPhotoPipeline:
 
         return np.clip(result, 0.0, 1.0)
 
-    def _guided_filter_alpha(self, image: np.ndarray, alpha: np.ndarray, trimap: np.ndarray) -> np.ndarray:
+    def _guided_filter_alpha(self, image, alpha, trimap):
+        _ensure_cv2()
         guide = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
         radius = self.guided_filter_radius
         eps = self.guided_filter_eps
@@ -397,7 +435,8 @@ class IDPhotoPipeline:
         return np.clip(result, 0.0, 1.0)
 
     @staticmethod
-    def _optimize_alpha(alpha: np.ndarray) -> np.ndarray:
+    def _optimize_alpha(alpha):
+        _ensure_cv2()
         result = alpha.copy()
 
         binary = (alpha >= 0.5).astype(np.uint8)
@@ -426,7 +465,8 @@ class IDPhotoPipeline:
 
         return np.clip(result, 0.0, 1.0)
 
-    def _remove_artifacts(self, image: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    def _remove_artifacts(self, image, alpha):
+        _ensure_cv2()
         image_f = image.astype(np.float32)
         alpha_u8 = (alpha * 255).astype(np.uint8)
 
@@ -466,11 +506,13 @@ class IDPhotoPipeline:
 from io import BytesIO
 
 
-def _rasterize_alpha(source: np.ndarray, alpha: np.ndarray) -> bytes:
+def _rasterize_alpha(source, alpha) -> bytes:
+    _ensure_cv2()
+    from PIL import Image as PILImage
     h, w = alpha.shape
     rgba = np.zeros((h, w, 4), dtype=np.uint8)
     rgba[:, :, :3] = source
     rgba[:, :, 3] = alpha
     buf = BytesIO()
-    Image.fromarray(rgba, "RGBA").save(buf, format="PNG")
+    PILImage.fromarray(rgba, "RGBA").save(buf, format="PNG")
     return buf.getvalue()

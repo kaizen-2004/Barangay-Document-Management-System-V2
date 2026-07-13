@@ -1,44 +1,43 @@
 Barangay Document Management System - Deployment Instructions
 =============================================================
 
-Two ways to deploy: with Python installed, or as a standalone .exe.
-
-
-OPTION A: Python-based (requires Python 3.10+ on the PC)
----------------------------------------------------------
+OPTION A: Python-based (recommended)
+-------------------------------------
 
 Step 1 — Install Python
-  1. Go to https://python.org and download Python 3.10+
-  2. Run installer, CHECK "Add Python to PATH", click Install
+  1. Go to https://python.org and download Python 3.12+
+  2. Run installer, CHECK "Add python.exe to PATH", click Install
 
 Step 2 — Install Git
   1. Go to https://git-scm.com and download Git for Windows
   2. Run installer (default options)
 
-Step 3 — Deploy
+Step 3 — Install uv (fast package manager)
+  Open PowerShell and run:
+
+     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+  Close and reopen your terminal after install.
+
+Step 4 — Deploy
   Open Command Prompt and run:
 
      cd C:\
      git clone <repo-url> barangay
      cd barangay
+     uv sync
+     start.bat
 
-     python -m venv venv
-     venv\Scripts\activate
-     pip install -r requirements.txt
-     set FLASK_APP=barangay_project/app.py
-     flask db upgrade
-     flask seed-admin
-
-Step 4 — Create desktop shortcut
+Step 5 — Create desktop shortcut
   Right-click desktop -> New -> Shortcut
   Location: C:\barangay\start-ssl.bat
   Name: Barangay System
 
-Step 5 — Run
+Step 6 — Run
   Double-click the shortcut.
-  Browser opens at https://localhost:5000. 
+  Browser opens at http://localhost:5000 (or https://localhost:5000 with --ssl).
   Log in with admin / admin.
-  Mobile: https://<IP>:5000 (accept cert warning for camera).
+  If other PCs can't access, run setup-firewall.bat as Administrator.
 
 
 OPTION B: Standalone .exe (no Python needed on target PC)
@@ -48,14 +47,10 @@ Build the .exe once (on any machine with the source code):
 
   On Windows — open Command Prompt in the project folder and run:
 
-       venv\Scripts\activate
-       build.bat
+       uv sync
+       uv run build.bat
 
-  On Linux — from the project folder, run:
-
-       bash build.sh       (requires Docker)
-
-The .exe will be at:  dist\BarangaySystem\BarangaySystem.exe
+  The .exe will be at:  dist\BarangaySystem\BarangaySystem.exe
 
 Copy the entire dist\BarangaySystem\ folder to any Windows PC.
 
@@ -77,3 +72,4 @@ Notes
 - PDF conversion via LibreOffice is skipped if unavailable;
   the system serves .docx files instead.
 - Login: admin / admin  (change password after first login).
+- Background removal works fully offline (no internet required).

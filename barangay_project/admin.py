@@ -22,7 +22,7 @@ from sqlalchemy.engine import make_url
 
 from .extensions import db
 from .helpers import log_action, roles_required, save_uploaded_image
-from .models import BarangayStreet, Placeholder, Resident, TransactionLog, User, Document, DocumentType, Official
+from .models import BarangayStreet, Placeholder, Resident, TransactionLog, User, Document, DocumentType, Official, PasswordResetCode
 from .forms import BarangayStreetForm, EditUserForm, UserForm, DeleteForm, DocumentTypeForm, OfficialForm
 from .docx_pipeline import (
     store_template_upload,
@@ -266,6 +266,7 @@ def add_user():
             return render_template("user_form.html", form=form)
         user = User(
             username=form.username.data,
+            email=form.email.data.strip().lower() if form.email.data else None,
             role=form.role.data,
         )
         user.set_password(form.password.data)
@@ -310,6 +311,7 @@ def edit_user(user_id: int):
             return render_template("user_edit_form.html", form=form, user=user)
 
         user.username = form.username.data
+        user.email = form.email.data.strip().lower() if form.email.data else None
         user.role = form.role.data
         # Only set a new password if one was provided
         if form.password.data:
@@ -344,6 +346,7 @@ def delete_user(user_id: int):
 
     # Preserve audit logs by detaching user references before deletion.
     TransactionLog.query.filter_by(user_id=user.id).update({"user_id": None}, synchronize_session=False)
+    PasswordResetCode.query.filter_by(user_id=user.id).delete(synchronize_session=False)
 
     db.session.delete(user)
     db.session.commit()

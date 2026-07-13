@@ -393,7 +393,7 @@ def _build_resident_signature_for_document(tpl: DocxTemplate, resident) -> str |
     sig_abs = _relative_static_to_abs(getattr(resident, "signature_path", None))
     if sig_abs and Path(sig_abs).exists():
         sig_img = Image.open(sig_abs).convert("RGBA")
-        target_w, target_h = 700, 120
+        target_w, target_h = 500, 150
         sig_ratio = sig_img.width / sig_img.height
         target_ratio = target_w / target_h
         if sig_ratio > target_ratio:

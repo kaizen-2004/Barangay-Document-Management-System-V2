@@ -245,7 +245,13 @@ def create_app(config_class=DevelopmentConfig):
 
     @app.after_request
     def apply_security_headers(response):
-        """Set security headers (CSP/HSTS/etc.)."""
+        """Set security headers (CSP/HSTS/etc.) and caching."""
+        # Cache static assets for 1 hour
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=3600"
+        elif request.endpoint and request.endpoint.startswith("static"):
+            response.headers["Cache-Control"] = "public, max-age=3600"
+
         if app.config.get("SECURITY_HEADERS_ENABLED", True):
             csp = app.config.get("CSP")
             if csp:
@@ -561,6 +567,22 @@ def create_app(config_class=DevelopmentConfig):
                 )
                 insp = inspect(db.engine)
 
+            # --- password_reset_codes: ensure the table exists ---
+            if not insp.has_table("password_reset_codes"):
+                _exec_try(
+                    """
+                    CREATE TABLE IF NOT EXISTS password_reset_codes (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id),
+                        code VARCHAR(6) NOT NULL,
+                        expires_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                        used BOOLEAN NOT NULL DEFAULT FALSE,
+                        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW() NOT NULL
+                    );
+                    """
+                )
+                insp = inspect(db.engine)
+
             # --- users: add missing columns used by the current models ---
             if insp.has_table("users"):
                 ucols = _colnames("users")
@@ -693,6 +715,20 @@ def create_app(config_class=DevelopmentConfig):
                     db.session.rollback()
 
             insp = inspect(db.engine)
+            if insp.has_table("users"):
+                ucols = _colnames("users")
+                if "email" not in ucols:
+                    _exec_try_any("ALTER TABLE users ADD COLUMN email VARCHAR(255);")
+            if not insp.has_table("password_reset_codes"):
+                _exec_try_any(
+                    "CREATE TABLE IF NOT EXISTS password_reset_codes ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "user_id INTEGER NOT NULL REFERENCES users(id), "
+                    "code VARCHAR(6) NOT NULL, "
+                    "expires_at DATETIME NOT NULL, "
+                    "used BOOLEAN NOT NULL DEFAULT 0, "
+                    "created_at DATETIME NOT NULL)"
+                )
             if insp.has_table("document_types"):
                 dt_cols = _colnames("document_types")
                 if "field_config" not in dt_cols:

@@ -57,14 +57,14 @@
 
 {% if not resident.is_archived %}
 <div class="bdm-info-card mb-3">
-  <div class="card-header bg-transparent d-flex align-items-center gap-2">
+  <div class="card-header bg-transparent d-flex align-items-center gap-2 pb-2">
     <i class="fas fa-file-export" style="color: var(--bdm-primary);"></i>
     <div>
       <div class="fw-semibold">Quick Issue</div>
       <div class="text-muted small">Create a draft with the resident pre-selected.</div>
     </div>
   </div>
-  <div class="card-body">
+  <div class="card-body" style="padding: 0.75rem 1rem;">
     <div class="d-flex flex-wrap gap-2">
       {% for dt in document_types %}
         <a class="btn btn-outline-success btn-sm" href="{{ url_for('main.issue_document', resident_id=resident.id, document_type_id=dt.id) }}">{{ dt.name }}</a>

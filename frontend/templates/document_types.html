@@ -15,34 +15,27 @@
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>ID</th>
                     <th>Name</th>
-                    <th>Description</th>
                     <th>Template</th>
-                    <th>Active</th>
-                    <th>Photo Required</th>
-                    <th>Validity</th>
-                    <th>Placeholder Rules</th>
+                    <th>Photo</th>
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for dt in document_types %}
                 <tr>
-                    <td>{{ dt.id }}</td>
-                    <td>{{ dt.name }}</td>
-                    <td>{{ dt.description or '' }}</td>
+                    <td>
+                        <strong>{{ dt.name }}</strong>
+                        {% if dt.description %}<br><small class="text-muted">{{ dt.description }}</small>{% endif %}
+                    </td>
                     <td>
                         {% if dt.template_filename %}
-                            {{ dt.template_filename }} (v{{ dt.template_version or 1 }})
+                            <span class="badge bg-success">Active</span> {{ dt.template_filename }}
                         {% else %}
-                            <span class="text-muted">No DOCX template</span>
+                            <span class="text-muted">No template</span>
                         {% endif %}
                     </td>
-                    <td>{{ 'Yes' if dt.template_active else 'No' }}</td>
-                    <td>{{ 'Yes' if dt.requires_photo else 'No' }}</td>
-                    <td>{{ dt.validity_text or 'Auto' }}</td>
-                    <td>{{ 'Custom' if dt.placeholder_config else 'Default' }}</td>
+                    <td>{{ 'Yes' if dt.requires_photo else '—' }}</td>
                     <td class="text-end text-nowrap">
                         <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.edit_document_type', type_id=dt.id) }}" title="Edit"><i class="fas fa-pen"></i></a>
                         <form method="POST" action="{{ url_for('admin.delete_document_type', type_id=dt.id) }}" style="display:inline;" class="d-inline" data-confirm="Delete this document type?">
@@ -53,7 +46,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9" class="text-center text-muted p-3"><i class="fas fa-file me-2"></i>No document types found.</td>
+                    <td colspan="4" class="text-center text-muted p-3"><i class="fas fa-file me-2"></i>No document types found.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -61,24 +54,4 @@
         </div>
 </div>
 {% include '_pagination.html' %}
-<script>
-  (function () {
-    document.querySelectorAll('[data-copy-target]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-copy-target');
-        const node = document.getElementById(id);
-        if (!node) return;
-        const text = node.textContent || '';
-        try {
-          await navigator.clipboard.writeText(text);
-          btn.textContent = 'Copied';
-          setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
-        } catch (_) {
-          btn.textContent = 'Failed';
-          setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
-        }
-      });
-    });
-  })();
-</script>
 {% endblock %}

@@ -76,6 +76,11 @@ class Config:
     # Background removal: downscale images larger than this for speed (0 = no limit)
     BG_REMOVAL_MAX_DIMENSION = int(os.environ.get("BG_REMOVAL_MAX_DIMENSION", "280"))
 
+    # remove.bg API key (optional). When set, background removal uses the API
+    # when online and falls back to local rembg when offline.
+    # Get your free key at https://www.remove.bg/api
+    REMOVE_BG_API_KEY = os.environ.get("REMOVE_BG_API_KEY", "")
+
     # CSRF: keep tokens valid (avoids "token expired" during long admin sessions)
     WTF_CSRF_TIME_LIMIT = None
 
@@ -139,6 +144,13 @@ class Config:
     LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("LOGIN_RATE_LIMIT_WINDOW_SECONDS", 600))
     LOGIN_RATE_LIMIT_MAX = int(os.environ.get("LOGIN_RATE_LIMIT_MAX", 5))
 
+    # Password reset via email (Brevo/Sendinblue API)
+    # Get your free API key at https://app.brevo.com/settings/api-keys (300 emails/day free)
+    BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
+    BREVO_FROM_EMAIL = os.environ.get("BREVO_FROM_EMAIL", "")
+    BREVO_FROM_NAME = os.environ.get("BREVO_FROM_NAME", "Barangay System")
+    PASSWORD_RESET_CODE_EXPIRY_MINUTES = int(os.environ.get("PASSWORD_RESET_CODE_EXPIRY_MINUTES", 15))
+
     # Session timeouts
     SESSION_IDLE_TIMEOUT_SECONDS = int(os.environ.get("SESSION_IDLE_TIMEOUT_SECONDS", 1800))
     SESSION_ABSOLUTE_TIMEOUT_SECONDS = int(os.environ.get("SESSION_ABSOLUTE_TIMEOUT_SECONDS", 8 * 60 * 60))
@@ -158,12 +170,13 @@ class Config:
         "CSP",
         (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: blob:; "
-            "font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+            "font-src 'self'; "
             "connect-src 'self'; "
             "media-src 'self' blob:; "
+            "worker-src 'self' blob:; "
             "object-src 'none'; "
             "base-uri 'self'; "
             "form-action 'self'; "
