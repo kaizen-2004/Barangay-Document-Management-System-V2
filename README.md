@@ -49,7 +49,7 @@ A computer system that helps barangay offices manage resident records, issue off
 3. Go to: `http://localhost:5000`
 4. Log in with your username and password
 
-> Default admin login: **admin** / **admin** (change this after first login!)
+> On the first run, the system generates a random admin password and prints it once in the server console. Save it and change the password after logging in.
 
 ### Daily Tasks
 
@@ -79,22 +79,23 @@ A computer system that helps barangay offices manage resident records, issue off
 
 ### What You Need
 
-- A Windows computer (or Linux/Mac for technical users)
-- LibreOffice installed (for converting documents to PDF)
+- Python 3.12+
+- `uv` package manager
+- LibreOffice on the server PC for PDF conversion (optional; DOCX output remains available)
 
 ### Quick Setup
 
-1. Install the required tools (one-time setup, requires internet):
+1. Install Python and `uv` (one-time setup, requires internet):
 
 ```bash
-pip install uv
-uv sync --group dev
+python -m pip install uv
+uv sync
 ```
 
 2. Copy the settings template and edit it:
 
 ```bash
-cp .env.example .env
+copy .env.example .env
 ```
 
 3. Open the `.env` file in a text editor and set a secret key:
@@ -108,7 +109,7 @@ SECRET_KEY=any-long-random-text-here
 4. Start the system:
 
 ```bash
-uv run python run_server.py
+start.bat
 ```
 
 5. Open `http://localhost:5000` in your browser.
@@ -119,9 +120,9 @@ When the system starts for the first time, it automatically:
 - Creates all necessary database tables
 - Adds 25 local streets
 - Adds 7 document types
-- Creates a default admin account
+- Creates an admin account with a generated random password printed in the server console
 
-> **Important:** Change the default admin password immediately after first login.
+> **Important:** Change the generated admin password immediately after first login.
 
 ---
 
@@ -157,7 +158,7 @@ To make QR codes work from any location (not just your office computer):
 PUBLIC_URL=https://your-public-link-here
 ```
 
-See `README_SETUP.md` for detailed instructions.
+See `docs/onprem-windows-deployment-checklist.md` for the LAN deployment checklist.
 
 ---
 
@@ -176,9 +177,8 @@ See `README_SETUP.md` for detailed instructions.
 
 | Document | What It Covers |
 |----------|---------------|
-| `README_SETUP.md` | Detailed installation and setup guide |
-| `DEPLOYMENT.md` | How to deploy on a server |
-| `docs/executable-build-and-deploy.md` | Building a standalone Windows app (no installation needed) |
+| `docs/onprem-windows-deployment-checklist.md` | Source deployment on a Windows LAN server |
+| `docs/executable-build-and-deploy.md` | Optional standalone Windows executable |
 
 ---
 
@@ -201,18 +201,15 @@ See `README_SETUP.md` for detailed instructions.
 ### Project Structure
 
 ```
-barangay_project_final/
-  run_server.py              # Start the system
-  wsgi.py                    # Alternative start (for servers)
-  .env.example               # Settings template
-
-  barangay_project/          # Core application files
-  frontend/                  # Web pages and styling
-  tests/                     # Automated tests
-  scripts/                   # Helper scripts
-  data/                      # Database, uploads, backups
-  barangay_data/             # Document templates
-  migrations/                # Database structure changes
+run_server.py                # Start the system
+wsgi.py                      # Waitress/WSGI entry point
+.env.example                 # Settings template
+barangay_project/             # Core application files
+frontend/                     # Web pages, styling, and seed DOCX templates
+tests/                        # Automated tests
+scripts/windows/              # Optional service and backup helpers
+data/                         # Runtime database, uploads, and backups
+migrations/                   # Database structure changes
 ```
 
 ### CLI Commands
@@ -236,7 +233,7 @@ uv run python -m pytest tests
 build.bat
 ```
 
-Produces `dist/BarangaySystem/BarangaySystem.exe` -- runs on any Windows PC without Python installed.
+Produces `dist/barangay_server.exe` -- runs on any Windows PC without Python or Git installed.
 
 </details>
 

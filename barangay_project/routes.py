@@ -23,7 +23,7 @@ from datetime import date as dt_date, datetime, timedelta, time as dt_time
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, Response, send_file, url_for
 from flask_login import login_required, current_user
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, case, func, or_
 
 from .forms import DocumentForm, ResidentForm
 from .helpers import delete_capture_photo_paths, log_action, reprocess_captured_photo, roles_required, save_camera_capture_for_processing, save_or_keep_resident_photo, save_or_keep_resident_signature
@@ -125,30 +125,75 @@ def _resident_profile_field_values(resident: Resident) -> dict[str, str]:
 
 
 def _resident_document_field_values() -> dict[int, dict[str, str]]:
-    residents = Resident.query.filter(Resident.is_archived.is_(False)).all()
-    return {resident.id: _resident_profile_field_values(resident) for resident in residents}
+    """Legacy wrapper - use _load_resident_data() for better performance."""
+    field_values, _, _ = _load_resident_data()
+    return field_values
 
 
 def _resident_signature_values() -> dict[int, dict[str, str]]:
-    residents = Resident.query.filter(Resident.is_archived.is_(False)).all()
-    return {
-        resident.id: {
-            "path": resident.signature_path or "",
-            "url": url_for("static", filename=resident.signature_path) if resident.signature_path else "",
-        }
-        for resident in residents
-    }
+    """Legacy wrapper - use _load_resident_data() for better performance."""
+    _, signature_values, _ = _load_resident_data()
+    return signature_values
 
 
 def _resident_photo_values() -> dict[int, dict[str, str]]:
+    """Legacy wrapper - use _load_resident_data() for better performance."""
+    _, _, photo_values = _load_resident_data()
+    return photo_values
+
+
+# Cache for resident data (single query optimization)
+_resident_data_cache = {
+    "field_values": {},
+    "signature_values": {},
+    "photo_values": {},
+    "timestamp": 0,
+}
+_RESIDENT_CACHE_TTL = 60  # seconds
+
+
+def _load_resident_data() -> tuple[dict[int, dict[str, str]], dict[int, dict[str, str]], dict[int, dict[str, str]]]:
+    """Load all resident data in a single query with caching.
+
+    Returns:
+        Tuple of (field_values, signature_values, photo_values) dicts keyed by resident ID.
+    """
+    now = time.time()
+    if now - _resident_data_cache["timestamp"] < _RESIDENT_CACHE_TTL:
+        return (
+            _resident_data_cache["field_values"],
+            _resident_data_cache["signature_values"],
+            _resident_data_cache["photo_values"],
+        )
+
     residents = Resident.query.filter(Resident.is_archived.is_(False)).all()
-    return {
-        resident.id: {
-            "path": resident.photo_path or "",
-            "url": url_for("static", filename=resident.photo_path) if resident.photo_path else "",
+
+    field_values = {}
+    signature_values = {}
+    photo_values = {}
+
+    for r in residents:
+        field_values[r.id] = _resident_profile_field_values(r)
+        signature_values[r.id] = {
+            "path": r.signature_path or "",
+            "url": url_for("static", filename=r.signature_path) if r.signature_path else "",
         }
-        for resident in residents
-    }
+        photo_values[r.id] = {
+            "path": r.photo_path or "",
+            "url": url_for("static", filename=r.photo_path) if r.photo_path else "",
+        }
+
+    _resident_data_cache["field_values"] = field_values
+    _resident_data_cache["signature_values"] = signature_values
+    _resident_data_cache["photo_values"] = photo_values
+    _resident_data_cache["timestamp"] = now
+
+    return field_values, signature_values, photo_values
+
+
+def _invalidate_resident_data_cache() -> None:
+    """Invalidate the resident data cache (call after resident updates)."""
+    _resident_data_cache["timestamp"] = 0
 
 
 def _collect_document_field_values(doc_type: DocumentType, resident: Resident) -> tuple[dict[str, str], list[str]]:
@@ -527,54 +572,102 @@ def index():
     status_labels = ["Issued", "Draft", "Pending/Approved", "Archived"]
     status_values = [document_count, draft_document_count, pending_document_count, archived_document_count]
 
-    # Residents by age group
+    # Residents by age group - optimized SQL query
     age_groups = {"0-17": 0, "18-30": 0, "31-45": 0, "46-60": 0, "61+": 0}
-    for r in Resident.query.filter(Resident.is_archived.is_(False), Resident.birth_date.isnot(None)).all():
-        age = (today - r.birth_date).days // 365
-        if age < 18:
-            age_groups["0-17"] += 1
-        elif age <= 30:
-            age_groups["18-30"] += 1
-        elif age <= 45:
-            age_groups["31-45"] += 1
-        elif age <= 60:
-            age_groups["46-60"] += 1
-        else:
-            age_groups["61+"] += 1
+    today_str = today.isoformat()
+    age_expr = (
+        func.cast(func.strftime('%Y', today_str), db.Integer)
+        - func.cast(func.strftime('%Y', Resident.birth_date), db.Integer)
+        - case(
+            (func.strftime('%m-%d', today_str) < func.strftime('%m-%d', Resident.birth_date), 1),
+            else_=0
+        )
+    )
+    age_rows = db.session.query(
+        case(
+            (age_expr < 18, '0-17'),
+            (age_expr <= 30, '18-30'),
+            (age_expr <= 45, '31-45'),
+            (age_expr <= 60, '46-60'),
+            else_='61+'
+        ).label('age_group'),
+        func.count()
+    ).filter(
+        Resident.is_archived.is_(False),
+        Resident.birth_date.isnot(None)
+    ).group_by('age_group').all()
+
+    for group, count in age_rows:
+        if group in age_groups:
+            age_groups[group] = count
     age_labels = list(age_groups.keys())
     age_values = list(age_groups.values())
 
-    # Expiring documents (within 30 days)
+    # Expiring documents (within 30 days) - optimized with indexed expiry_date column
     expiring_cutoff = today + timedelta(days=30)
     expiring_docs = []
-    all_issued = Document.query.filter(
+    expiring_query = Document.query.join(DocumentType).join(Resident).filter(
         Document.is_archived.is_(False),
         Document.status == "issued",
-    ).all()
-    for doc in all_issued:
-        vm = doc.document_type.validity_months if doc.document_type else None
-        if vm and doc.issue_date:
-            issue = doc.issue_date
-            if hasattr(issue, "date"):
-                issue = issue.date()
-            expiry = _add_months(issue, vm)
-            if today <= expiry <= expiring_cutoff:
-                expiring_docs.append({
-                    "id": doc.id,
-                    "resident_id": doc.resident_id,
-                    "resident_name": f"{doc.resident.last_name}, {doc.resident.first_name}",
-                    "doc_type": doc.document_type.name,
-                    "expiry_date": expiry,
-                })
-    expiring_docs.sort(key=lambda x: x["expiry_date"])
+        Document.expiry_date.isnot(None),
+        Document.expiry_date >= today,
+        Document.expiry_date <= expiring_cutoff,
+    ).order_by(Document.expiry_date.asc()).all()
+
+    for doc in expiring_query:
+        expiring_docs.append({
+            "id": doc.id,
+            "resident_id": doc.resident_id,
+            "resident_name": f"{doc.resident.last_name}, {doc.resident.first_name}",
+            "doc_type": doc.document_type.name,
+            "expiry_date": doc.expiry_date,
+        })
     expiring_count = len(expiring_docs)
 
-    # Upcoming birthdays (within 30 days)
+    # Upcoming birthdays (within 30 days) - optimized with SQL filtering
     birthday_cutoff = today + timedelta(days=30)
     upcoming_birthdays = []
-    for r in Resident.query.filter(Resident.is_archived.is_(False)).all():
-        if not r.birth_date:
-            continue
+
+    # Get month and day ranges for the next 30 days
+    # This handles year wrap-around (e.g., Dec -> Jan)
+    today_month = today.month
+    today_day = today.day
+    cutoff_month = birthday_cutoff.month
+    cutoff_day = birthday_cutoff.day
+
+    # Query residents with birthdays in the date range
+    birth_month = func.extract('month', Resident.birth_date)
+    birth_day = func.extract('day', Resident.birth_date)
+
+    # Build filter for birthday window
+    # Case 1: Same year (e.g., Jan 15 - Feb 14)
+    # Case 2: Year wrap (e.g., Dec 15 - Jan 14)
+    if today.year == birthday_cutoff.year:
+        # Same year: filter by month/day range
+        birthday_filter = and_(
+            Resident.is_archived.is_(False),
+            Resident.birth_date.isnot(None),
+            or_(
+                and_(birth_month == today_month, birth_day >= today_day),
+                and_(birth_month > today_month, birth_month < cutoff_month),
+                and_(birth_month == cutoff_month, birth_day <= cutoff_day),
+            )
+        )
+    else:
+        # Year wrap: e.g., Dec 15 - Jan 14
+        birthday_filter = and_(
+            Resident.is_archived.is_(False),
+            Resident.birth_date.isnot(None),
+            or_(
+                and_(birth_month == today_month, birth_day >= today_day),
+                birth_month > today_month,
+                and_(birth_month == cutoff_month, birth_day <= cutoff_day),
+            )
+        )
+
+    birthday_candidates = Resident.query.filter(birthday_filter).all()
+
+    for r in birthday_candidates:
         try:
             bday = dt_date(today.year, r.birth_date.month, r.birth_date.day)
         except ValueError:
@@ -1228,6 +1321,7 @@ def add_resident():
             resident.barangay_id = f"KNL-{dt_date.today().year}-{resident.id:05d}"
 
         db.session.commit()
+        _invalidate_resident_data_cache()  # Invalidate cache after resident creation
         log_action(
             f"Created resident #{resident.id} ({resident.last_name}, {resident.first_name})".upper(),
             entity_type="resident",
@@ -1321,6 +1415,7 @@ def edit_resident(resident_id: int):
                 resident.signature_path = sig_rel_path
 
         db.session.commit()
+        _invalidate_resident_data_cache()  # Invalidate cache after resident update
         log_action(
             f"Updated resident #{resident.id}",
             entity_type="resident",
@@ -1511,6 +1606,7 @@ def purge_resident(resident_id: int):
             os.remove(abs_path)
     db.session.delete(resident)
     db.session.commit()
+    _invalidate_resident_data_cache()  # Invalidate cache after resident deletion
     log_action(
         f"Permanently deleted resident #{resident_id}",
         entity_type="resident",
@@ -1569,6 +1665,7 @@ def bulk_purge_residents():
                 os.remove(abs_path)
         db.session.delete(resident)
     db.session.commit()
+    _invalidate_resident_data_cache()  # Invalidate cache after bulk resident deletion
     for resident in residents:
         log_action(
             f"Permanently deleted resident #{resident.id} (bulk)",
@@ -1798,9 +1895,7 @@ def download_document_pdf(document_id: int):
 def issue_document():
     form = DocumentForm()
     field_configs = _document_type_field_configs()
-    resident_field_values = _resident_document_field_values()
-    resident_photo_values = _resident_photo_values()
-    resident_signature_values = _resident_signature_values()
+    resident_field_values, resident_signature_values, resident_photo_values = _load_resident_data()
     form.resident_id.choices = [
         (r.id, f"{r.last_name}, {r.first_name}".upper())
         for r in Resident.query.filter(Resident.is_archived.is_(False)).order_by(Resident.last_name.asc())
@@ -1853,6 +1948,8 @@ def issue_document():
             status="draft",
             created_by_id=current_user.id,
         )
+        doc.document_type = doc_type  # Set relationship for compute_expiry_date
+        doc.compute_expiry_date()
         db.session.add(doc)
         db.session.commit()
 
@@ -1878,9 +1975,7 @@ def issue_document():
 def edit_document(document_id: int):
     document = db.get_or_404(Document, document_id)
     field_configs = _document_type_field_configs()
-    resident_field_values = _resident_document_field_values()
-    resident_photo_values = _resident_photo_values()
-    resident_signature_values = _resident_signature_values()
+    resident_field_values, resident_signature_values, resident_photo_values = _load_resident_data()
     if document.is_archived:
         flash("Archived documents cannot be edited.", "warning")
         return redirect(url_for("main.list_documents"))
@@ -2124,6 +2219,8 @@ def revise_document(document_id: int):
         issue_date=dt_date.today(),
         created_by_id=current_user.id,
     )
+    new_doc.document_type = document.document_type  # Set relationship for compute_expiry_date
+    new_doc.compute_expiry_date()
     db.session.add(new_doc)
     db.session.commit()
 
@@ -2336,6 +2433,8 @@ def bulk_issue_documents():
             issue_date=today,
             created_by_id=current_user.id,
         )
+        doc.document_type = doc_type  # Set relationship for compute_expiry_date
+        doc.compute_expiry_date()
         db.session.add(doc)
         count += 1
     db.session.commit()

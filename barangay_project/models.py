@@ -2,7 +2,7 @@
 SQLAlchemy models defining the database schema for the Barangay Document
 Management System.
 
-Each model corresponds to a table in the PostgreSQL database.  Relationships
+Each model corresponds to a table in the SQLite database by default. Relationships
 between models are declared via foreign keys and backrefs.  Additional
 optional fields can be added to meet specific barangay requirements.
 """
@@ -132,6 +132,7 @@ class Document(db.Model):
     __tablename__ = "documents"
     __table_args__ = (
         db.Index("ix_documents_issue_date", "issue_date"),
+        db.Index("ix_documents_expiry_date", "expiry_date"),
         db.Index("ix_documents_resident_id", "resident_id"),
         db.Index("ix_documents_document_type_id", "document_type_id"),
         db.Index("ix_documents_status", "status"),
@@ -144,6 +145,7 @@ class Document(db.Model):
     details = db.Column(db.Text, nullable=True)
     field_values = db.Column(db.Text, nullable=True)
     issue_date = db.Column(db.DateTime, default=utcnow, nullable=False)
+    expiry_date = db.Column(db.Date, nullable=True)  # Computed: issue_date + validity_months
     file_path = db.Column(db.String(255), nullable=True)
     generated_docx_path = db.Column(db.String(255), nullable=True)
     generation_status = db.Column(db.String(50), nullable=False, default="pending", server_default=text("'pending'"))
@@ -163,6 +165,22 @@ class Document(db.Model):
 
     resident = db.relationship("Resident", back_populates="documents")
     document_type = db.relationship("DocumentType", back_populates="documents")
+
+    def compute_expiry_date(self):
+        """Compute and set the expiry_date based on issue_date and document type validity_months."""
+        if self.issue_date and self.document_type and self.document_type.validity_months:
+            from calendar import monthrange
+            issue = self.issue_date
+            if hasattr(issue, 'date'):
+                issue = issue.date()
+            months = self.document_type.validity_months
+            year = issue.year + (issue.month - 1 + months) // 12
+            month = (issue.month - 1 + months) % 12 + 1
+            day = min(issue.day, monthrange(year, month)[1])
+            from datetime import date as dt_date
+            self.expiry_date = dt_date(year, month, day)
+        else:
+            self.expiry_date = None
 
     def __repr__(self):
         return f"<Document {self.id} - {self.document_type.name} for {self.resident.last_name}>"

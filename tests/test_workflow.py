@@ -24,13 +24,11 @@ def test_document_workflow(client, app, make_user, make_resident, make_document_
     resident = make_resident(birth_date=date(1990, 1, 1))
     doc_type = make_document_type(name="Test Clearance", requires_photo=False)
 
-    static_uploads = os.path.join(app.static_folder, "uploads")
-    os.makedirs(static_uploads, exist_ok=True)
-    os.makedirs(os.path.join(static_uploads, "doc_templates"), exist_ok=True)
-    os.makedirs(os.path.join(static_uploads, "official_signatures"), exist_ok=True)
+    template_dir = app.config["DOCX_TEMPLATE_UPLOAD_DIR"]
+    os.makedirs(template_dir, exist_ok=True)
     os.makedirs(os.path.join(app.config["UPLOAD_FOLDER"], "residents"), exist_ok=True)
 
-    template_abs = os.path.join(static_uploads, "doc_templates", "test-clearance.docx")
+    template_abs = os.path.join(template_dir, "test-clearance.docx")
     tpl = DocxDocument()
     tpl.add_paragraph("Resident: {{ resident_name }}")
     tpl.add_paragraph("Address: {{ address }}")
@@ -41,21 +39,17 @@ def test_document_workflow(client, app, make_user, make_resident, make_document_
     tpl.add_paragraph("QR: {{ qr_code }}")
     tpl.save(template_abs)
 
-    sig_abs = os.path.join(static_uploads, "official_signatures", "captain-signature.jpg")
-    Image.new("RGB", (300, 80), color=(255, 255, 255)).save(sig_abs)
-
     resident_photo_abs = os.path.join(app.config["UPLOAD_FOLDER"], "residents", "resident-photo.jpg")
     Image.new("RGB", (250, 250), color=(200, 200, 200)).save(resident_photo_abs)
 
     resident.photo_path = "uploads/residents/resident-photo.jpg"
-    doc_type.template_path = "uploads/doc_templates/test-clearance.docx"
+    doc_type.template_path = "test-clearance.docx"
     doc_type.template_filename = "test-clearance.docx"
     doc_type.template_active = True
 
     official = Official(
         full_name="Juan Dela Cruz",
         title="Barangay Captain",
-        signature_path="uploads/official_signatures/captain-signature.jpg",
         is_active=True,
     )
     db.session.add(official)

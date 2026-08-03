@@ -9,14 +9,21 @@ data/
 backups/
 barangay_project/static/uploads/
 *.db
+*.sqlite
+*.sqlite3
 *.db-journal
 *.db-wal
 *.db-shm
+*.log
 
 # Python caches
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
 
 # OS / editor
 .DS_Store
@@ -39,6 +46,7 @@ barangay_project.egg-info/
 frontend/static/uploads/
 build/
 dist/
+release_bundle/
 instance/
 nul
 *.spec

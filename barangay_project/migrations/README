@@ -1,5 +1,0 @@
-This directory contains Alembic migrations generated via Flask-Migrate.
-
-Typical workflow:
-  flask db migrate -m "your message"
-  flask db upgrade

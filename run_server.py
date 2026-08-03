@@ -51,9 +51,9 @@ def _setup_frozen_env() -> None:
     uploads = _app_dir() / "static" / "uploads"
     uploads.mkdir(parents=True, exist_ok=True)
 
-    # Copy seed doc_templates from bundle to writable data dir on first run
+    # Copy seed doc_templates from the bundle to writable storage on first run.
     bundled_templates = Path(sys._MEIPASS) / "frontend" / "static" / "uploads" / "doc_templates"
-    data_templates = uploads / "doc_templates"
+    data_templates = data / "templates"
     if bundled_templates.exists() and not data_templates.exists():
         shutil.copytree(str(bundled_templates), str(data_templates))
         print(f" * Copied seed templates to {data_templates}")

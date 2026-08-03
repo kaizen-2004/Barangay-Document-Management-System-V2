@@ -20,27 +20,27 @@
   {# Quick action cards grid #}
   <div class="bdm-quick-actions bdm-fade-in">
     <a class="bdm-action-card" href="{{ url_for('main.add_resident') }}">
-      <span class="bdm-action-icon" style="background:#fce4e4;color:#7f1d1d;"><i class="fas fa-user-plus"></i></span>
+      <span class="bdm-action-icon bdm-chip-rose"><i class="fas fa-user-plus"></i></span>
       <span class="action-title">Add Resident</span>
       <span class="action-desc">Create a new resident record</span>
     </a>
     <a class="bdm-action-card" href="{{ url_for('main.issue_document') }}">
-      <span class="bdm-action-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-file-pen"></i></span>
+      <span class="bdm-action-icon bdm-chip-blue"><i class="fas fa-file-pen"></i></span>
       <span class="action-title">Create Draft</span>
       <span class="action-desc">Start a new document draft</span>
     </a>
     <a class="bdm-action-card" href="{{ url_for('main.list_documents', status='draft') }}">
-      <span class="bdm-action-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-hourglass-half"></i></span>
+      <span class="bdm-action-icon bdm-chip-amber"><i class="fas fa-hourglass-half"></i></span>
       <span class="action-title">Pending Review{% if pending_document_count %} <span class="bdm-action-badge">{{ pending_document_count }}</span>{% endif %}</span>
       <span class="action-desc">Documents awaiting approval</span>
     </a>
     <a class="bdm-action-card" href="{{ url_for('main.global_search') }}">
-      <span class="bdm-action-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-magnifying-glass"></i></span>
+      <span class="bdm-action-icon bdm-chip-accent"><i class="fas fa-magnifying-glass"></i></span>
       <span class="action-title">Search Records</span>
       <span class="action-desc">Find residents or documents</span>
     </a>
     <a class="bdm-action-card" href="{{ url_for('main.reports') }}">
-      <span class="bdm-action-icon" style="background:#e0e7ff;color:#3730a3;"><i class="fas fa-chart-bar"></i></span>
+      <span class="bdm-action-icon bdm-chip-indigo"><i class="fas fa-chart-bar"></i></span>
       <span class="action-title">View Reports</span>
       <span class="action-desc">Explore analytics</span>
     </a>
@@ -50,7 +50,7 @@
   <div class="row g-3 mb-4">
     <div class="col-12 col-sm-6 col-md-6 col-xl">
       <a href="{{ url_for('main.list_residents') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
-        <span class="bdm-action-icon" style="background:#fce4e4;color:#7f1d1d;"><i class="fas fa-users"></i></span>
+        <span class="bdm-action-icon bdm-chip-rose"><i class="fas fa-users"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Active Residents</div>
           <div class="h2 fw-semibold mb-0">{{ resident_count }}</div>
@@ -63,7 +63,7 @@
     </div>
     <div class="col-12 col-sm-6 col-md-6 col-xl">
       <a href="{{ url_for('main.list_documents') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
-        <span class="bdm-action-icon" style="background:#dbeafe;color:#1e40af;"><i class="fas fa-file-lines"></i></span>
+        <span class="bdm-action-icon bdm-chip-blue"><i class="fas fa-file-lines"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Issued Documents</div>
           <div class="h2 fw-semibold mb-0">{{ document_count }}</div>
@@ -76,7 +76,7 @@
     </div>
     <div class="col-12 col-sm-6 col-md-6 col-xl">
       <a href="{{ url_for('main.reports') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
-        <span class="bdm-action-icon" style="background:#e0e7ff;color:#3730a3;"><i class="fas fa-calendar-check"></i></span>
+        <span class="bdm-action-icon bdm-chip-indigo"><i class="fas fa-calendar-check"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">This month</div>
           <div class="h2 fw-semibold mb-0">{{ documents_this_month }}</div>
@@ -86,7 +86,7 @@
     </div>
     <div class="col-12 col-sm-6 col-md-6 col-xl">
       <a href="{{ url_for('main.list_documents', status='draft') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
-        <span class="bdm-action-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-pen"></i></span>
+        <span class="bdm-action-icon bdm-chip-amber"><i class="fas fa-pen"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Drafts</div>
           <div class="h2 fw-semibold mb-0">{{ draft_document_count }}</div>
@@ -96,7 +96,7 @@
     </div>
     <div class="col-12 col-sm-6 col-md-6 col-xl">
       <a href="{{ url_for('main.list_documents', status='draft') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
-        <span class="bdm-action-icon" style="background:#fef9c3;color:#854d0e;"><i class="fas fa-hourglass-half"></i></span>
+        <span class="bdm-action-icon bdm-chip-yellow"><i class="fas fa-hourglass-half"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Pending Approval</div>
           <div class="h2 fw-semibold mb-0">{{ pending_document_count }}</div>
@@ -106,7 +106,7 @@
     </div>
     <div class="col-12 col-sm-6 col-md-6 col-xl">
       <a href="{{ url_for('main.list_archived_residents') }}" class="bdm-metric-card bdm-metric-link h-100 d-flex align-items-center gap-3">
-        <span class="bdm-action-icon" style="background:#f1f5f9;color:#475569;"><i class="fas fa-archive"></i></span>
+        <span class="bdm-action-icon bdm-chip-slate"><i class="fas fa-archive"></i></span>
         <div class="flex-grow-1">
           <div class="text-muted small">Archived</div>
           <div class="h2 fw-semibold mb-0">{{ archived_resident_count + archived_document_count }}</div>
@@ -162,16 +162,17 @@
   {% endif %}
 
   {# Expiring documents alert #}
-  {% if expiring_docs %}
+  {# Documents expiring within 30 days #}
   <div class="row g-3 mb-4">
     <div class="col-12">
       <div class="bdm-chart-card">
         <div class="card-header bg-transparent d-flex align-items-center gap-2" style="border-left: 4px solid var(--bdm-accent);">
           <i class="fas fa-triangle-exclamation text-warning"></i>
           <span class="fw-semibold">Documents expiring within 30 days</span>
-          <span class="badge bg-warning text-dark ms-auto">{{ expiring_count }}</span>
+          {% if expiring_docs %}<span class="badge bg-warning text-dark ms-auto">{{ expiring_count }}</span>{% endif %}
         </div>
         <div class="card-body">
+          {% if expiring_docs %}
           <div class="table-responsive">
             <table class="table table-sm mb-0">
               <thead>
@@ -194,23 +195,28 @@
               </tbody>
             </table>
           </div>
+          {% else %}
+          <div class="bdm-empty-state-icon">
+            <i class="fas fa-circle-check"></i>
+            <span>No documents expiring soon</span>
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>
   </div>
-  {% endif %}
 
   {# Upcoming birthdays #}
-  {% if upcoming_birthdays %}
   <div class="row g-3 mb-4">
     <div class="col-md-6">
       <div class="bdm-chart-card h-100">
         <div class="card-header bg-transparent d-flex align-items-center gap-2">
           <i class="fas fa-cake-candles text-primary"></i>
           <span class="fw-semibold">Upcoming Birthdays</span>
-          <span class="badge bg-primary ms-auto">{{ upcoming_birthdays|length }}</span>
+          {% if upcoming_birthdays %}<span class="badge bg-primary ms-auto">{{ upcoming_birthdays|length }}</span>{% endif %}
         </div>
         <div class="card-body">
+          {% if upcoming_birthdays %}
           <div class="table-responsive">
             <table class="table table-sm mb-0">
               <thead>
@@ -231,11 +237,16 @@
               </tbody>
             </table>
           </div>
+          {% else %}
+          <div class="bdm-empty-state-icon">
+            <i class="fas fa-calendar-xmark"></i>
+            <span>No upcoming birthdays</span>
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>
   </div>
-  {% endif %}
 
   {# Charts row 1 #}
   <div class="row g-3 mb-4">

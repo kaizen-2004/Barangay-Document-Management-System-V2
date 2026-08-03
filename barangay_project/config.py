@@ -1,16 +1,16 @@
 """
 Configuration settings for the Barangay Document Management System.
 
-This module defines different configuration classes for various environments
-(development, testing, production).  The default configuration uses
-environment variables to construct the SQLAlchemy database URI; if a
-`DATABASE_URL` is not provided, a fallback is used.
+This module defines configuration classes for development, testing, and
+production. The default configuration uses a zero-setup SQLite database;
+`DATABASE_URL` can override it when another SQLAlchemy backend is required.
 
 The default database is SQLite (zero-setup, single-file).  To use
 MySQL or PostgreSQL instead, set the `DATABASE_URL` environment variable
 before starting the application.
 """
 import os
+import secrets
 import shutil
 import sys
 from datetime import timedelta
@@ -32,9 +32,12 @@ def _find_libreoffice() -> str:
 class Config:
     """Base configuration with default settings."""
 
-    SECRET_KEY = os.environ.get("SECRET_KEY", "a-very-secret-key")
+    # SECRET_KEY must be set in production. If not provided, a random key is
+    # generated at startup (suitable for dev only; sessions won't persist
+    # across restarts).
+    SECRET_KEY = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
     # Default to SQLite for zero-setup deployment.  Override via
-    # DATABASE_URL env var to use MySQL, PostgreSQL, or any SQLAlchemy backend.
+    # DATABASE_URL can override the SQLite default for another SQLAlchemy backend.
     # For SQLite relative paths, we resolve to an absolute path so that
     # Flask-SQLAlchemy (which resolves against the instance folder) works
     # consistently regardless of how the app is started.
@@ -194,7 +197,9 @@ class ProductionConfig(Config):
     """Configuration for production environment."""
 
     DEBUG = False
-    # In production, you might fetch a secure database URL and secret key from the environment
+    # In production, require explicit SECRET_KEY
+    SECRET_KEY = os.environ.get("SECRET_KEY", "")
+    SESSION_COOKIE_SECURE = True
 
 
 class TestingConfig(Config):

@@ -2,12 +2,20 @@
 title Barangay System
 cd /d "%~dp0"
 
-:: Choose EXE or source
-if exist "dist\BarangaySystem\BarangaySystem.exe" (
-    set EXE=dist\BarangaySystem\BarangaySystem.exe
+:: Prefer the optional executable; otherwise run the source checkout with uv.
+if exist "barangay_server.exe" (
+    set "EXE=barangay_server.exe"
+) else if exist "dist\barangay_server.exe" (
+    set "EXE=dist\barangay_server.exe"
 ) else (
-    call venv\Scripts\activate
-    set EXE=python run_server.py
+    where uv >nul 2>&1
+    if %ERRORLEVEL% neq 0 (
+        echo [ERROR] uv is required for source deployment.
+        echo Install it with: pip install uv
+        pause
+        exit /b 1
+    )
+    set "EXE=uv run python run_server.py"
 )
 
 :: --ssl flag? Pass it through

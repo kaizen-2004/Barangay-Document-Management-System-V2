@@ -2,50 +2,24 @@
 title Build Barangay System .exe
 cd /d "%~dp0"
 
-echo Installing/upgrading PyInstaller...
-python -m pip install --upgrade pyinstaller -q
+where uv >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+  echo [ERROR] uv is required. Install it with: pip install uv
+  pause
+  exit /b 1
+)
 
 echo Building executable (this may take a few minutes)...
-pyinstaller --onedir --console --name "BarangaySystem" ^
-  --copy-metadata pymatting ^
-  --copy-metadata rembg ^
-  --add-data "frontend\templates;frontend\templates" ^
-  --add-data "frontend\static;frontend\static" ^
-  --add-data "migrations;migrations" ^
-  --add-data "frontend\static\uploads\doc_templates;frontend\static\uploads\doc_templates" ^
-  --hidden-import flask ^
-  --hidden-import flask_sqlalchemy ^
-  --hidden-import flask_login ^
-  --hidden-import flask_migrate ^
-  --hidden-import flask_wtf ^
-  --hidden-import sqlalchemy ^
-  --hidden-import alembic ^
-  --hidden-import docxtpl ^
-  --hidden-import PIL ^
-  --hidden-import PIL._tkinter_finder ^
-  --hidden-import cv2 ^
-  --hidden-import rembg ^
-  --hidden-import onnxruntime ^
-  --hidden-import qrcode ^
-  --hidden-import reportlab ^
-  --hidden-import openpyxl ^
-  --hidden-import cryptography ^
-  --hidden-import waitress ^
-  --hidden-import email_validator ^
-  --hidden-import dotenv ^
-  --hidden-import numpy ^
-  --hidden-import werkzeug ^
-  --hidden-import unicodedata ^
-  run_server.py
+uv run pyinstaller packaging\barangay_server.spec --clean
 
 echo.
 echo ============================================
 echo  Build complete!
 echo.
 echo  The executable is at:
-echo    dist\BarangaySystem\BarangaySystem.exe
+echo    dist\barangay_server.exe
 echo.
-echo  Create a desktop shortcut pointing to it.
-echo  Double-click to start the system.
+echo  Copy it to the target Windows computer.
+echo  No Python or Git is required for the executable.
 echo ============================================
 pause

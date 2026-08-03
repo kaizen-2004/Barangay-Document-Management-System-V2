@@ -1,28 +1,28 @@
 # Barangay System – One-Click Update (Windows)
-# Run from the project root, or double-click  packaging\windows_bundle\UPDATE.bat
+# Run from the project root after replacing the source files.
 
 param(
     [string]$ServiceName = "BarangaySystem",
-    [int]$Port = 5000
+    [int]$Port = 5000,
+    [string]$NssmPath = "nssm.exe"
 )
 
 $ErrorActionPreference = "Stop"
 
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $AppDir     = Split-Path -Parent (Split-Path -Parent $ScriptDir)
-$BundleDir  = Join-Path $AppDir "packaging\windows_bundle"
-$DataDir    = Join-Path $AppDir "data"
-$NssmBin    = Join-Path $BundleDir "nssm.exe"
+$NssmCommand = Get-Command $NssmPath -ErrorAction SilentlyContinue
 
 Set-Location $AppDir
 Write-Host "Barangay System Update" -ForegroundColor Cyan
 Write-Host "App directory: $AppDir"
 
-if (-not (Test-Path $NssmBin)) {
-    Write-Host "ERROR: nssm.exe not found at $NssmBin" -ForegroundColor Red
+if (-not $NssmCommand) {
+    Write-Host "ERROR: NSSM was not found. Install NSSM and add nssm.exe to PATH." -ForegroundColor Red
     pause
     exit 1
 }
+$NssmBin = $NssmCommand.Source
 
 Write-Host "Updating dependencies..."
 uv sync

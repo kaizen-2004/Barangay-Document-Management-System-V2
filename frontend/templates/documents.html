@@ -141,8 +141,12 @@
             <td>
                 {% if doc.is_archived %}
                     <span class="bdm-status bdm-status-archived">Archived</span>
-                {% elif doc.status in ["draft", "pending", "approved"] %}
+                {% elif doc.status == "draft" %}
                     <span class="bdm-status bdm-status-draft">Draft</span>
+                {% elif doc.status == "pending" %}
+                    <span class="bdm-status bdm-status-pending">Pending</span>
+                {% elif doc.status == "approved" %}
+                    <span class="bdm-status bdm-status-approved">Approved</span>
                 {% else %}
                     <span class="bdm-status bdm-status-issued">Issued</span>
                 {% endif %}

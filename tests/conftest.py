@@ -22,6 +22,8 @@ def app(tmp_path):
         AUTO_MIGRATE = False
         AUTO_CREATE_DB = True
         UPLOAD_FOLDER = str(upload_dir)
+        DOCX_TEMPLATE_UPLOAD_DIR = str(tmp_path / "templates")
+        DOCX_OUTPUT_DIR = str(tmp_path / "generated")
         SECURITY_HEADERS_ENABLED = False
         ERROR_REPORT_EMAIL = ""
 

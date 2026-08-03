@@ -5,7 +5,6 @@ from pathlib import Path
 
 SPEC_DIR = Path(globals().get("SPECPATH", Path.cwd()))
 ROOT = SPEC_DIR.parent
-FRONTEND_DIR = ROOT / "frontend-spa" / "dist"
 
 
 def _collect_files(base: Path, target_prefix: str):
@@ -21,7 +20,34 @@ def _collect_files(base: Path, target_prefix: str):
 
 
 datas = []
-datas.extend(_collect_files(FRONTEND_DIR, "frontend-spa/dist"))
+datas.extend(_collect_files(ROOT / "frontend" / "templates", "frontend/templates"))
+datas.extend(_collect_files(ROOT / "frontend" / "static", "frontend/static"))
+datas.extend(_collect_files(ROOT / "migrations", "migrations"))
+
+hiddenimports = [
+    "flask",
+    "flask_sqlalchemy",
+    "flask_login",
+    "flask_migrate",
+    "flask_wtf",
+    "sqlalchemy",
+    "alembic",
+    "docxtpl",
+    "PIL",
+    "PIL._tkinter_finder",
+    "cv2",
+    "rembg",
+    "onnxruntime",
+    "qrcode",
+    "reportlab",
+    "openpyxl",
+    "cryptography",
+    "waitress",
+    "email_validator",
+    "dotenv",
+    "numpy",
+    "werkzeug",
+]
 
 
 a = Analysis(
@@ -29,7 +55,7 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

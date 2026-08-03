@@ -8,8 +8,10 @@ starts the development server.
 import json
 import logging
 import os
+import secrets
 import shutil
 import sqlite3
+import string
 import subprocess
 import threading
 import time
@@ -150,18 +152,25 @@ def create_app(config_class=DevelopmentConfig):
             "app_author": current_app.config.get("APP_AUTHOR", "Steve Villa"),
         }
 
+    # Simple in-memory cache for pending document count
+    _pending_count_cache = {"count": 0, "timestamp": 0}
+    _CACHE_TTL = 30  # seconds
+
     @app.context_processor
     def inject_pending_count():
         from .models import Document
 
-        try:
-            pending_count = Document.query.filter(
-                Document.is_archived.is_(False),
-                Document.status.in_(("draft", "pending")),
-            ).count()
-        except Exception:
-            pending_count = 0
-        return {"sidebar_pending_count": pending_count}
+        now = time.time()
+        if now - _pending_count_cache["timestamp"] > _CACHE_TTL:
+            try:
+                _pending_count_cache["count"] = Document.query.filter(
+                    Document.is_archived.is_(False),
+                    Document.status.in_(("draft", "pending")),
+                ).count()
+                _pending_count_cache["timestamp"] = now
+            except Exception:
+                pass
+        return {"sidebar_pending_count": _pending_count_cache["count"]}
 
     app.jinja_env.filters["local_datetime"] = format_local_datetime
 
@@ -638,6 +647,8 @@ def create_app(config_class=DevelopmentConfig):
                     _exec_try("ALTER TABLE documents ADD COLUMN field_values TEXT;")
                 if "generated_at" not in dcols:
                     _exec_try("ALTER TABLE documents ADD COLUMN generated_at DATETIME;")
+                if "expiry_date" not in dcols:
+                    _exec_try("ALTER TABLE documents ADD COLUMN expiry_date DATE;")
                 _exec_try("UPDATE documents SET created_at = issue_date WHERE created_at IS NULL;")
                 _exec_try("UPDATE documents SET issued_at = issue_date WHERE issued_at IS NULL AND status='issued';")
                 insp = inspect(db.engine)
@@ -663,7 +674,7 @@ def create_app(config_class=DevelopmentConfig):
                         """
                     )
 
-                
+
                     # Keep legacy `doc_type` column compatible:
                     # Some older DBs have documents.doc_type as NOT NULL. Newer code inserts only
                     # `document_type_id`, so we set a default and backfill NULLs to avoid crashes.
@@ -738,6 +749,8 @@ def create_app(config_class=DevelopmentConfig):
                 dcols = _colnames("documents")
                 if "field_values" not in dcols:
                     _exec_try_any("ALTER TABLE documents ADD COLUMN field_values TEXT;")
+                if "expiry_date" not in dcols:
+                    _exec_try_any("ALTER TABLE documents ADD COLUMN expiry_date DATE;")
                 insp = inspect(db.engine)
             if not insp.has_table("barangay_streets"):
                 _exec_try_any(
@@ -763,6 +776,37 @@ def create_app(config_class=DevelopmentConfig):
                 if "emergency_contact_address" not in rcols:
                     _exec_try_any("ALTER TABLE residents ADD COLUMN emergency_contact_address VARCHAR(255);")
                 insp = inspect(db.engine)
+
+        # Backfill expiry_date for existing documents that don't have it set
+        if insp.has_table("documents") and insp.has_table("document_types"):
+            try:
+                db.session.execute(text("""
+                    UPDATE documents
+                    SET expiry_date = CASE
+                        WHEN issue_date IS NOT NULL AND document_type_id IS NOT NULL THEN
+                            DATE(
+                                SUBSTR(issue_date, 1, 4) + (
+                                    CAST(SUBSTR(issue_date, 6, 2) AS INTEGER) - 1
+                                    + COALESCE((SELECT validity_months FROM document_types WHERE id = document_type_id), 0)
+                                ) / 12,
+                                (
+                                    (CAST(SUBSTR(issue_date, 6, 2) AS INTEGER) - 1
+                                    + COALESCE((SELECT validity_months FROM document_types WHERE id = document_type_id), 0))
+                                    % 12
+                                ) + 1,
+                                MIN(CAST(SUBSTR(issue_date, 9, 2) AS INTEGER), 28)
+                            )
+                        ELSE NULL
+                    END
+                    WHERE expiry_date IS NULL
+                    AND status = 'issued'
+                    AND issue_date IS NOT NULL;
+                """))
+                db.session.commit()
+                current_app.logger.info("Backfilled expiry_date for existing documents")
+            except Exception:
+                current_app.logger.debug("Could not backfill expiry_date (may not exist yet)")
+                db.session.rollback()
 
         # Seed common document types (safe to run repeatedly)
         DEFAULT_DOCUMENT_TYPES = [
@@ -850,10 +894,24 @@ def create_app(config_class=DevelopmentConfig):
                 current_app.logger.exception("Failed to check user count for seed")
                 user_count = None
             if user_count == 0:
+                # Generate a random admin password for first run
+                alphabet = string.ascii_letters + string.digits + "!@#$%&*"
+                admin_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+
                 admin = User(username="admin", role="admin")
-                admin.set_password("admin")
+                admin.set_password(admin_password)
                 db.session.add(admin)
                 db.session.commit()
+
+                # Print credentials to console (only shown on first run)
+                print("\n" + "=" * 60)
+                print("DEFAULT ADMIN CREDENTIALS (save these now!)")
+                print("=" * 60)
+                print(f"Username: admin")
+                print(f"Password: {admin_password}")
+                print("=" * 60)
+                print("You will be required to change this password on first login.")
+                print("=" * 60 + "\n")
 
         # Seed default placeholders if table exists and is empty
         if insp.has_table("placeholders"):
